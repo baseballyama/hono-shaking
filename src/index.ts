@@ -1,2 +1,2 @@
-// Placeholder. Real exports are added in subsequent commits.
-export const VERSION = '0.0.0';
+export { type ExtractOptions, extractRoutes } from './extract-routes.ts';
+export type { CallSiteRef, DefinedRoute, DiffResult, HttpMethod, RouteRef } from './types.ts';

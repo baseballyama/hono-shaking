@@ -22,6 +22,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": false,
+    "allowImportingTsExtensions": true,
 
     "declaration": true,
     "declarationMap": true,

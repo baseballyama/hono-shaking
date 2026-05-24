@@ -40,11 +40,7 @@
   "bin": {
     "hono-shaking": "./dist/cli.js"
   },
-  "files": [
-    "dist",
-    "LICENSE",
-    "README.md"
-  ],
+  "files": ["dist", "LICENSE", "README.md"],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",

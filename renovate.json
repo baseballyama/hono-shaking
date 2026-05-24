@@ -23,9 +23,7 @@
     }
   ],
   "ignoreDeps": [],
-  "ignorePaths": [
-    "vendor/**"
-  ],
+  "ignorePaths": ["vendor/**"],
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": ["before 6am on Monday"]
