@@ -3,7 +3,7 @@
 </template>
 
 <script setup lang="ts">
-import { thingsClient } from './client.ts';
+import { thingsClient } from "./client.ts";
 
 const load = async () => {
   const res = await thingsClient.things.$get();
@@ -11,6 +11,6 @@ const load = async () => {
 };
 
 const update = async (id: string) => {
-  await thingsClient.things[':id'].$put({ param: { id }, json: {} });
+  await thingsClient.things[":id"].$put({ param: { id }, json: {} });
 };
 </script>

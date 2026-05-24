@@ -5,13 +5,13 @@
 // .ts loading is delegated to jiti — the same loader Nuxt / Vitest use — so
 // configs with transitive .ts imports work without extra build steps.
 
-import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { existsSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
-import { createJiti } from 'jiti';
+import { createJiti } from "jiti";
 
-import type { CallSiteRef, DefinedRoute, HttpMethod } from './types.ts';
+import type { CallSiteRef, DefinedRoute, HttpMethod } from "./types.ts";
 
 export interface IgnoreRoutePattern {
   /** `null` matches any method (equivalent to `'*'`). */
@@ -46,11 +46,11 @@ export interface HonoUnusedConfig {
 export const defineConfig = (config: HonoUnusedConfig): HonoUnusedConfig => config;
 
 const CONFIG_FILENAMES = [
-  'hono-shaking.config.ts',
-  'hono-shaking.config.mts',
-  'hono-shaking.config.mjs',
-  'hono-shaking.config.js',
-  'hono-shaking.config.cjs',
+  "hono-shaking.config.ts",
+  "hono-shaking.config.mts",
+  "hono-shaking.config.mjs",
+  "hono-shaking.config.js",
+  "hono-shaking.config.cjs",
 ] as const;
 
 /** Look in `cwd`, then optionally `root`, for any of the supported config filenames. */
@@ -67,12 +67,12 @@ export const findConfigFile = (cwd: string, root: string | null): string | null 
 };
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
-  v != null && typeof v === 'object' && !Array.isArray(v);
+  v != null && typeof v === "object" && !Array.isArray(v);
 
 const validateConfig = (raw: unknown, configPath: string): HonoUnusedConfig => {
   // jiti sometimes returns the module record with a `default` field, sometimes
   // the value itself depending on how the file was written. Tolerate both.
-  const value = isPlainObject(raw) && 'default' in raw ? raw.default : raw;
+  const value = isPlainObject(raw) && "default" in raw ? raw.default : raw;
   if (!isPlainObject(value)) {
     throw new Error(`config (${configPath}) must export an object as default`);
   }
@@ -110,18 +110,18 @@ export const loadConfig = async (configPath: string): Promise<HonoUnusedConfig> 
  * metacharacters are escaped.
  */
 const globToRegex = (glob: string): RegExp => {
-  let out = '';
+  let out = "";
   for (let i = 0; i < glob.length; i++) {
     const c = glob[i];
     if (c == null) continue;
-    if (c === '*') {
-      if (glob[i + 1] === '*') {
-        out += '.*';
+    if (c === "*") {
+      if (glob[i + 1] === "*") {
+        out += ".*";
         i++;
       } else {
-        out += '[^/]*';
+        out += "[^/]*";
       }
-    } else if ('.+?()[]{}|^$\\'.includes(c)) {
+    } else if (".+?()[]{}|^$\\".includes(c)) {
       out += `\\${c}`;
     } else {
       out += c;
@@ -135,7 +135,7 @@ const asArray = <T>(v: T | T[] | null): T[] => {
   return Array.isArray(v) ? v : [v];
 };
 
-const matchesMethod = (method: HttpMethod, pattern: IgnoreRoutePattern['method']): boolean => {
+const matchesMethod = (method: HttpMethod, pattern: IgnoreRoutePattern["method"]): boolean => {
   if (pattern == null) return true;
   const list = asArray(pattern);
   return list.length === 0 || list.includes(method);
@@ -150,7 +150,7 @@ const matchesServer = (
   configDir: string,
 ): boolean => {
   if (serverGlob == null) return true;
-  const resolvedGlob = serverGlob.startsWith('/') ? serverGlob : join(configDir, serverGlob);
+  const resolvedGlob = serverGlob.startsWith("/") ? serverGlob : join(configDir, serverGlob);
   return globToRegex(resolvedGlob).test(route.source);
 };
 

@@ -1,6 +1,6 @@
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve } from "node:path";
 
-import ts from 'typescript';
+import ts from "typescript";
 
 export interface LoadedProgram {
   program: ts.Program;
@@ -24,7 +24,7 @@ export const loadProgram = (tsconfigPath: string): LoadedProgram => {
     getCurrentDirectory: () => dirname(configPath),
     onUnRecoverableConfigFileDiagnostic: (d) => {
       throw new Error(
-        `tsconfig load error: ${ts.flattenDiagnosticMessageText(d.messageText, '\n')}`,
+        `tsconfig load error: ${ts.flattenDiagnosticMessageText(d.messageText, "\n")}`,
       );
     },
   });

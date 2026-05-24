@@ -1,4 +1,4 @@
-import type { FrameworkAdapter, TransformedScript } from './adapter.ts';
+import type { FrameworkAdapter, TransformedScript } from "./adapter.ts";
 
 interface ScriptBlock {
   content: string;
@@ -22,10 +22,10 @@ type VueParseFn = (source: string, options: { filename: string }) => { descripto
 export const createVueAdapter = async (): Promise<FrameworkAdapter | null> => {
   let parse: VueParseFn;
   try {
-    const mod = await import('@vue/compiler-sfc');
-    if (mod == null || typeof mod !== 'object') return null;
+    const mod = await import("@vue/compiler-sfc");
+    if (mod == null || typeof mod !== "object") return null;
     const fn = (mod as Record<string, unknown>).parse;
-    if (typeof fn !== 'function') return null;
+    if (typeof fn !== "function") return null;
     parse = fn as VueParseFn;
   } catch (err) {
     if (process.env.HONO_SHAKING_DEBUG != null) {
@@ -35,9 +35,9 @@ export const createVueAdapter = async (): Promise<FrameworkAdapter | null> => {
   }
 
   return {
-    name: 'vue',
-    extensions: ['vue'],
-    matches: (file) => file.endsWith('.vue'),
+    name: "vue",
+    extensions: ["vue"],
+    matches: (file) => file.endsWith(".vue"),
     transform: (file, content): TransformedScript | null => {
       let descriptor: SfcDescriptor;
       try {
@@ -58,7 +58,7 @@ export const createVueAdapter = async (): Promise<FrameworkAdapter | null> => {
         const startLine = block.loc.start.line;
         for (let i = 0; i < lines.length; i++) {
           generatedToOriginalLine.push(startLine + i);
-          generatedLines.push(lines[i] ?? '');
+          generatedLines.push(lines[i] ?? "");
         }
       };
 
@@ -68,7 +68,7 @@ export const createVueAdapter = async (): Promise<FrameworkAdapter | null> => {
       if (generatedLines.length === 0) return null;
 
       return {
-        code: generatedLines.join('\n'),
+        code: generatedLines.join("\n"),
         resolvePosition: (line, column) => {
           const idx = line - 1;
           const origLine = generatedToOriginalLine[idx];

@@ -1,6 +1,6 @@
-import { type SourceMapInput, TraceMap, originalPositionFor } from '@jridgewell/trace-mapping';
+import { type SourceMapInput, TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 
-import type { FrameworkAdapter, TransformedScript } from './adapter.ts';
+import type { FrameworkAdapter, TransformedScript } from "./adapter.ts";
 
 type Svelte2tsxFn = (source: string, options: object) => { code: string; map: object };
 
@@ -11,15 +11,15 @@ type Svelte2tsxFn = (source: string, options: object) => { code: string; map: ob
  * if it's a function.
  */
 const pickFunction = (mod: unknown, key: string): unknown => {
-  if (mod == null || typeof mod !== 'object') return null;
+  if (mod == null || typeof mod !== "object") return null;
   const top = (mod as Record<string, unknown>)[key];
-  if (typeof top === 'function') return top;
+  if (typeof top === "function") return top;
   const def = (mod as Record<string, unknown>).default;
-  if (def != null && typeof def === 'object') {
+  if (def != null && typeof def === "object") {
     const nested = (def as Record<string, unknown>)[key];
-    if (typeof nested === 'function') return nested;
+    if (typeof nested === "function") return nested;
   }
-  if (typeof def === 'function') return def;
+  if (typeof def === "function") return def;
   return null;
 };
 
@@ -31,9 +31,9 @@ const pickFunction = (mod: unknown, key: string): unknown => {
 export const createSvelteAdapter = async (): Promise<FrameworkAdapter | null> => {
   let svelte2tsx: Svelte2tsxFn;
   try {
-    const mod = await import('svelte2tsx');
-    const fn = pickFunction(mod, 'svelte2tsx');
-    if (typeof fn !== 'function') return null;
+    const mod = await import("svelte2tsx");
+    const fn = pickFunction(mod, "svelte2tsx");
+    if (typeof fn !== "function") return null;
     svelte2tsx = fn as Svelte2tsxFn;
   } catch (err) {
     if (process.env.HONO_SHAKING_DEBUG != null) {
@@ -43,9 +43,9 @@ export const createSvelteAdapter = async (): Promise<FrameworkAdapter | null> =>
   }
 
   return {
-    name: 'svelte',
-    extensions: ['svelte'],
-    matches: (file) => file.endsWith('.svelte'),
+    name: "svelte",
+    extensions: ["svelte"],
+    matches: (file) => file.endsWith(".svelte"),
     transform: (file, content): TransformedScript | null => {
       let result: { code: string; map: object };
       try {

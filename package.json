@@ -3,39 +3,26 @@
   "version": "0.1.1",
   "description": "Find unused Hono RPC endpoints. Type-driven detection that auto-discovers server/client pairs across a monorepo. Svelte / Vue / tsgo friendly.",
   "keywords": [
+    "cli",
+    "dead-code",
+    "hc",
     "hono",
     "hono-rpc",
-    "hc",
-    "unused-code",
-    "dead-code",
-    "tree-shaking",
-    "static-analysis",
-    "typescript",
     "monorepo",
-    "cli",
+    "static-analysis",
     "svelte",
+    "tree-shaking",
+    "typescript",
+    "unused-code",
     "vue"
   ],
   "homepage": "https://github.com/baseballyama/hono-shaking",
   "bugs": "https://github.com/baseballyama/hono-shaking/issues",
+  "license": "MIT",
+  "author": "Yuichiro Yamashita",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baseballyama/hono-shaking.git"
-  },
-  "license": "MIT",
-  "author": "Yuichiro Yamashita",
-  "type": "module",
-  "sideEffects": false,
-  "engines": {
-    "node": ">=20"
-  },
-  "main": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.mts",
-      "default": "./dist/index.mjs"
-    }
   },
   "bin": {
     "hono-shaking": "./dist/cli.mjs"
@@ -45,12 +32,22 @@
     "LICENSE",
     "README.md"
   ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    }
+  },
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
-    "lint": "biome lint .",
-    "format:check": "biome format .",
-    "format": "biome format --write .",
+    "lint": "oxlint",
+    "format:check": "oxfmt --check",
+    "format": "oxfmt --write",
     "test": "vitest run",
     "test:watch": "vitest",
     "release": "pnpm build && changeset publish",
@@ -60,6 +57,18 @@
     "@jridgewell/trace-mapping": "^0.3.30",
     "jiti": "^2.4.0",
     "typescript": "^5.6.0"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.0",
+    "@types/node": "^22.0.0",
+    "@vue/compiler-sfc": "^3.4.0",
+    "hono": "^4.6.0",
+    "oxfmt": "^0.51.0",
+    "oxlint": "^1.66.0",
+    "svelte": "^5.0.0",
+    "svelte2tsx": "^0.7.0",
+    "tsdown": "^0.22.0",
+    "vitest": "^2.1.0"
   },
   "peerDependencies": {
     "@vue/compiler-sfc": "^3.4.0",
@@ -77,21 +86,12 @@
       "optional": true
     }
   },
-  "devDependencies": {
-    "@biomejs/biome": "^1.9.0",
-    "@changesets/cli": "^2.27.0",
-    "@types/node": "^22.0.0",
-    "@vue/compiler-sfc": "^3.4.0",
-    "hono": "^4.6.0",
-    "svelte": "^5.0.0",
-    "svelte2tsx": "^0.7.0",
-    "tsdown": "^0.22.0",
-    "vitest": "^2.1.0"
+  "engines": {
+    "node": ">=20"
   },
   "packageManager": "pnpm@10.0.0",
   "pnpm": {
     "onlyBuiltDependencies": [
-      "@biomejs/biome",
       "esbuild"
     ]
   }

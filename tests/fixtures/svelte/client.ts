@@ -1,5 +1,5 @@
-import { hc } from 'hono/client';
+import { hc } from "hono/client";
 
-import type { AppType } from './server.ts';
+import type { AppType } from "./server.ts";
 
-export const blogClient = hc<AppType>('http://localhost');
+export const blogClient = hc<AppType>("http://localhost");

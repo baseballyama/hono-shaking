@@ -1,8 +1,8 @@
-import { hc } from 'hono/client';
+import { hc } from "hono/client";
 
-import type { AppType } from './server.ts';
+import type { AppType } from "./server.ts";
 
-export const itemsClient = hc<AppType>('http://localhost');
+export const itemsClient = hc<AppType>("http://localhost");
 
 interface Deps {
   itemsClient: typeof itemsClient;
@@ -15,5 +15,5 @@ export const list = async (deps: Deps) => {
 };
 
 export const detail = async (deps: Deps, id: string) => {
-  return deps.itemsClient.items[':id'].$get({ param: { id } });
+  return deps.itemsClient.items[":id"].$get({ param: { id } });
 };

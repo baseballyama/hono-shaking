@@ -6,7 +6,7 @@
 // symbol resolver to follow whichever shape the user chose, rather than matching
 // the literal identifier `hc` at the call site.
 
-import ts from 'typescript';
+import ts from "typescript";
 
 /**
  * `true` if the symbol, after following any alias chain, is the `hc` export of
@@ -18,7 +18,7 @@ export const isHonoClientHc = (symbol: ts.Symbol, checker: ts.TypeChecker): bool
   if ((resolved.flags & ts.SymbolFlags.Alias) !== 0) {
     resolved = checker.getAliasedSymbol(resolved);
   }
-  if (resolved.name !== 'hc') return false;
+  if (resolved.name !== "hc") return false;
   const decl = resolved.declarations?.[0];
   if (decl == null) return false;
   const fileName = decl.getSourceFile().fileName;

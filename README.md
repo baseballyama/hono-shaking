@@ -112,9 +112,9 @@ multiple frontends are supported out of the box.
 
 Auto-detect handles two binding patterns:
 
-| Pattern | Example |
-| --- | --- |
-| Direct | `const client = hc<AppType>(url)` |
+| Pattern | Example                                                      |
+| ------- | ------------------------------------------------------------ |
+| Direct  | `const client = hc<AppType>(url)`                            |
 | Factory | `const make = () => hc<AppType>(url); const client = make()` |
 
 The factory pattern is common when you wrap `hc()` in a function to inject
@@ -140,7 +140,7 @@ npx hono-shaking \
 npx hono-shaking --fail-on-unused --fail-on-orphans
 ```
 
-The exit code reflects findings *after* the config-driven ignore list is
+The exit code reflects findings _after_ the config-driven ignore list is
 applied. Adding a route to `ignore.routes` is how a team explicitly accepts
 a non-hc endpoint without breaking the build.
 
@@ -162,24 +162,24 @@ without a build step.
 
 ```ts
 // hono-shaking.config.ts
-import { defineConfig } from 'hono-shaking';
+import { defineConfig } from "hono-shaking";
 
 export default defineConfig({
   ignore: {
     routes: [
       // SSE / streaming endpoints — called via raw fetch, not hc.
-      { method: null, path: '/api/sse/**', reason: 'SSE — raw fetch' },
+      { method: null, path: "/api/sse/**", reason: "SSE — raw fetch" },
 
       // OAuth callbacks — invoked by the IdP, not the frontend.
-      { method: 'GET', path: '/api/oauth/**', reason: 'IdP callback' },
+      { method: "GET", path: "/api/oauth/**", reason: "IdP callback" },
 
       // Webhooks called by external systems.
-      { method: 'POST', path: '/api/webhooks/zendesk' },
+      { method: "POST", path: "/api/webhooks/zendesk" },
     ],
     orphans: [
       // A call to a different backend that legitimately doesn't appear
       // in the AppType we're analyzing.
-      { method: 'GET', path: '/token', file: '**/tiptap/Editor.svelte' },
+      { method: "GET", path: "/token", file: "**/tiptap/Editor.svelte" },
     ],
   },
 });
@@ -217,10 +217,10 @@ interface IgnoreOrphanPattern {
 
 ### CLI overrides
 
-| Flag | Purpose |
-| --- | --- |
-| `--config <path>` | Explicit config file path. |
-| `--no-config` | Skip config auto-discovery. |
+| Flag              | Purpose                     |
+| ----------------- | --------------------------- |
+| `--config <path>` | Explicit config file path.  |
+| `--no-config`     | Skip config auto-discovery. |
 
 ## How it works
 
@@ -232,7 +232,7 @@ interface IgnoreOrphanPattern {
 
 2. **Detect** call sites in the client. For every `obj.$get(...)` (or
    `$post`, etc.) we ask the type checker whether the receiver has Hono's
-   `$url` property — that's a unique marker on the RPC proxy's *leaf*
+   `$url` property — that's a unique marker on the RPC proxy's _leaf_
    nodes, and it's the central precision gate that keeps us from matching
    `obj.$get(...)` on unrelated objects.
 
@@ -246,7 +246,7 @@ interface IgnoreOrphanPattern {
 5. **Discover** (for `--root` mode) walks the repo for server and client
    candidates, runs the type checker to validate each candidate and to
    resolve `hc<T>` to its declaring file, and groups bindings by server so
-   "unused" is calculated across *all* consumers of a server, not per
+   "unused" is calculated across _all_ consumers of a server, not per
    consumer.
 
 For `.svelte` and `.vue`, each file is run through a `FrameworkAdapter`
@@ -269,9 +269,9 @@ import {
   diffRoutes,
   buildIgnoreFilter,
   loadConfig,
-} from 'hono-shaking';
+} from "hono-shaking";
 
-const { servers, bindings } = discoverProject('.');
+const { servers, bindings } = discoverProject(".");
 
 for (const binding of bindings) {
   const defined = extractRoutes({
@@ -302,22 +302,22 @@ for (const binding of bindings) {
   visible. Run hono-shaking in the repo where both server and client live,
   or run it twice (once per repo) and union the results.
 
-### Imports we *do* handle
+### Imports we _do_ handle
 
 `hc` resolution goes through the TypeScript symbol resolver, so any shape
 the compiler can follow works — including aliases, namespace imports, and
 re-exports through your own barrels:
 
 ```ts
-import { hc } from 'hono/client';
-import { hc as createClient } from 'hono/client';
-import * as hono from 'hono/client';
+import { hc } from "hono/client";
+import { hc as createClient } from "hono/client";
+import * as hono from "hono/client";
 //        ^ then called as hono.hc<T>(...)
 
 // Re-export through your own barrel:
 //   @org/backend/client.ts:  export { hc } from 'hono/client';
-import { hc } from '@org/backend/client';
-import { hc as createClient } from '@org/backend/client';
+import { hc } from "@org/backend/client";
+import { hc as createClient } from "@org/backend/client";
 ```
 
 ## License

@@ -1,18 +1,18 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 
-import ts from 'typescript';
+import ts from "typescript";
 
-import type { FrameworkAdapter } from './adapters/adapter.ts';
-import { loadBuiltinAdapters } from './adapters/registry.ts';
-import { isHcCallee } from './hc-symbol.ts';
-import { loadProgram } from './ts-program.ts';
-import type { CallSiteRef, HttpMethod } from './types.ts';
+import type { FrameworkAdapter } from "./adapters/adapter.ts";
+import { loadBuiltinAdapters } from "./adapters/registry.ts";
+import { isHcCallee } from "./hc-symbol.ts";
+import { loadProgram } from "./ts-program.ts";
+import type { CallSiteRef, HttpMethod } from "./types.ts";
 
-const METHOD_KEYS = new Set(['get', 'post', 'put', 'delete', 'patch', 'options', 'head', 'all']);
+const METHOD_KEYS = new Set(["get", "post", "put", "delete", "patch", "options", "head", "all"]);
 
 const toMethod = (key: string): HttpMethod | null => {
-  if (!key.startsWith('$')) return null;
+  if (!key.startsWith("$")) return null;
   const lower = key.slice(1);
   if (!METHOD_KEYS.has(lower)) return null;
   return lower.toUpperCase() as HttpMethod;
@@ -43,7 +43,7 @@ export interface FindOptions {
   adapters: FrameworkAdapter[] | null;
 }
 
-const segmentsToPath = (segments: string[]): string => `/${segments.join('/')}`;
+const segmentsToPath = (segments: string[]): string => `/${segments.join("/")}`;
 
 /**
  * The receiver of `.$get(...)` (and other `$method` calls) is the *leaf* of
@@ -54,7 +54,7 @@ const segmentsToPath = (segments: string[]): string => `/${segments.join('/')}`;
  */
 const receiverIsHcLeaf = (receiver: ts.Expression, checker: ts.TypeChecker): boolean => {
   const t = checker.getTypeAtLocation(receiver);
-  return checker.getPropertiesOfType(t).some((p) => p.name === '$url');
+  return checker.getPropertiesOfType(t).some((p) => p.name === "$url");
 };
 
 interface RawChain {
@@ -223,7 +223,7 @@ interface AdapterMatch {
   adapter: FrameworkAdapter;
 }
 
-const SKIP_WALK_DIRS = new Set(['node_modules', '.svelte-kit', 'dist', '.git']);
+const SKIP_WALK_DIRS = new Set(["node_modules", ".svelte-kit", "dist", ".git"]);
 
 const listAdapterFiles = (
   dir: string,
@@ -264,7 +264,7 @@ const scanWithAdapter = (
 ): CallSiteRef[] => {
   let content: string;
   try {
-    content = readFileSync(file, 'utf8');
+    content = readFileSync(file, "utf8");
   } catch (err) {
     console.warn(`hono-shaking: skip ${file}: ${String(err)}`);
     return [];

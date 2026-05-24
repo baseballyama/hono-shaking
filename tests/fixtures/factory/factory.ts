@@ -1,6 +1,6 @@
-import { hc } from 'hono/client';
+import { hc } from "hono/client";
 
-import type { AppType } from './server.ts';
+import type { AppType } from "./server.ts";
 
 export type OrgClient = ReturnType<typeof hc<AppType>>;
 

@@ -14,9 +14,10 @@ the diff. It also auto-discovers server/client pairs across a monorepo.
 | ----------- | ------------------------------------------------------------- |
 | Language    | TypeScript (strict)                                           |
 | Runtime     | Node.js >= 20                                                 |
-| Bundler     | tsup (zero-config, builds ESM + d.ts)                         |
+| Bundler     | tsdown (rolldown-based, builds ESM + d.ts)                    |
 | Tests       | Vitest                                                        |
-| Lint+format | Biome                                                         |
+| Lint        | oxlint                                                        |
+| Format      | oxfmt                                                         |
 | Versioning  | Changesets (npm publish via OIDC Trusted Publishers)          |
 | Type info   | `typescript` package's Compiler API (does not depend on tsgo) |
 | Config load | `jiti` (handles `.ts` config files with transitive imports)   |
@@ -37,13 +38,13 @@ Adapters are auto-loaded; missing peer deps simply disable that framework.
 
 ## Core principles
 
-| Principle           | What it means here                                                       |
-| ------------------- | ------------------------------------------------------------------------ |
-| Simplicity          | One way to do one thing. No parallel APIs.                               |
-| Type-driven         | Lean on the TS Compiler API rather than re-implementing route parsing.   |
+| Principle               | What it means here                                                                                                                 |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Simplicity              | One way to do one thing. No parallel APIs.                                                                                         |
+| Type-driven             | Lean on the TS Compiler API rather than re-implementing route parsing.                                                             |
 | Precision over coverage | False positives are worse than false negatives. Errors of omission can be added back via config; false unused reports erode trust. |
-| Maintainable        | Code that a first-time contributor can follow without prior context.     |
-| Backwards-compat    | SemVer. Public API additions are minor; behavior changes are major.      |
+| Maintainable            | Code that a first-time contributor can follow without prior context.                                                               |
+| Backwards-compat        | SemVer. Public API additions are minor; behavior changes are major.                                                                |
 
 ## "One way to do one thing"
 
@@ -114,12 +115,12 @@ without the change (no coverage-prop tests).
 Anything exported from `src/index.ts` is documented (or will be) in the README.
 Users depend on the shape, name, behavior, and exceptions.
 
-| Change             | SemVer        |
-| ------------------ | ------------- |
-| Add new export     | minor         |
-| Change behavior    | major         |
-| Remove / rename    | major (+ deprecate first post-1.0) |
-| Add CLI flag       | minor         |
+| Change             | SemVer                                   |
+| ------------------ | ---------------------------------------- |
+| Add new export     | minor                                    |
+| Change behavior    | major                                    |
+| Remove / rename    | major (+ deprecate first post-1.0)       |
+| Add CLI flag       | minor                                    |
 | Change CLI default | major (it changes scripts in user repos) |
 
 ### Changesets are user-facing
@@ -137,10 +138,10 @@ Pure-internal refactors don't need a changeset.
 The `.claude/skills/` directory contains workflow guides inherited from the
 [`my-oss-starter`](https://github.com/baseballyama/my-oss-starter) template.
 
-| Skill                | When to use                                                       |
-| -------------------- | ----------------------------------------------------------------- |
-| `pr-workflow`        | Creating a PR                                                     |
-| `full-code-review`   | Reviewing a branch before opening a PR                            |
-| `review-response`    | Responding to GitHub review comments                              |
-| `run-check-and-test` | Running quality checks and tests before commit / PR               |
-| `issue-triage`       | Classifying a GitHub issue and routing it to the right workflow   |
+| Skill                | When to use                                                     |
+| -------------------- | --------------------------------------------------------------- |
+| `pr-workflow`        | Creating a PR                                                   |
+| `full-code-review`   | Reviewing a branch before opening a PR                          |
+| `review-response`    | Responding to GitHub review comments                            |
+| `run-check-and-test` | Running quality checks and tests before commit / PR             |
+| `issue-triage`       | Classifying a GitHub issue and routing it to the right workflow |

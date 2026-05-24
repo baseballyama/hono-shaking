@@ -3,34 +3,34 @@
 // API. The output is a flat list of (server, clientVariable) bindings that
 // the analysis pipeline can run a diff over.
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 
-import ts from 'typescript';
+import ts from "typescript";
 
-import { extractRoutes } from './extract-routes.ts';
-import { isHcCallee } from './hc-symbol.ts';
-import { loadProgram } from './ts-program.ts';
+import { extractRoutes } from "./extract-routes.ts";
+import { isHcCallee } from "./hc-symbol.ts";
+import { loadProgram } from "./ts-program.ts";
 
 const SKIP_DIRS = new Set([
-  'node_modules',
-  '.git',
-  '.svelte-kit',
-  '.next',
-  '.nuxt',
-  'dist',
-  'build',
-  'out',
-  'coverage',
-  '.cache',
-  '.turbo',
-  '.vercel',
-  '.netlify',
-  '.output',
+  "node_modules",
+  ".git",
+  ".svelte-kit",
+  ".next",
+  ".nuxt",
+  "dist",
+  "build",
+  "out",
+  "coverage",
+  ".cache",
+  ".turbo",
+  ".vercel",
+  ".netlify",
+  ".output",
 ]);
 
 const isTsFile = (p: string): boolean =>
-  (p.endsWith('.ts') || p.endsWith('.tsx')) && !p.endsWith('.d.ts');
+  (p.endsWith(".ts") || p.endsWith(".tsx")) && !p.endsWith(".d.ts");
 
 const walkSourceFiles = (root: string): string[] => {
   const out: string[] = [];
@@ -48,7 +48,7 @@ const walkSourceFiles = (root: string): string[] => {
       if (SKIP_DIRS.has(name)) continue;
       // Skip dotfiles / dotdirs (e.g. `.changeset`, `.github`, editor scratch
       // dirs). They're virtually never the location of application source.
-      if (name.startsWith('.') && name !== '.' && name !== '..') continue;
+      if (name.startsWith(".") && name !== "." && name !== "..") continue;
       const p = join(dir, name);
       let s: ReturnType<typeof statSync>;
       try {
@@ -97,7 +97,7 @@ const detectServerCandidates = (files: string[]): RawServerCandidate[] => {
   for (const file of files) {
     let content: string;
     try {
-      content = readFileSync(file, 'utf8');
+      content = readFileSync(file, "utf8");
     } catch {
       continue;
     }
@@ -127,17 +127,17 @@ interface RawClientCandidate {
  * to key on, but the local name is still `hc`.
  */
 const collectHcLocalNames = (content: string): Set<string> => {
-  const names = new Set<string>(['hc']);
+  const names = new Set<string>(["hc"]);
   const namedImportRe = /import\s*(?:type\s+)?\{([^}]+)\}\s*from\s*['"]hono\/client['"]/g;
   for (const m of content.matchAll(namedImportRe)) {
     const specs = m[1];
     if (specs == null) continue;
-    for (const spec of specs.split(',')) {
+    for (const spec of specs.split(",")) {
       const trimmed = spec.trim();
       // "hc" or "hc as Y" (optionally prefixed by `type `, which we just ignore).
       const match = trimmed.match(/^(?:type\s+)?hc(?:\s+as\s+(\w+))?$/);
       if (match) {
-        names.add(match[1] ?? 'hc');
+        names.add(match[1] ?? "hc");
       }
     }
   }
@@ -149,7 +149,7 @@ const detectClientCandidates = (files: string[]): RawClientCandidate[] => {
   for (const file of files) {
     let content: string;
     try {
-      content = readFileSync(file, 'utf8');
+      content = readFileSync(file, "utf8");
     } catch {
       continue;
     }
@@ -182,7 +182,7 @@ export interface DiscoveredServer {
 const validateServers = (candidates: RawServerCandidate[], root: string): DiscoveredServer[] => {
   const out: DiscoveredServer[] = [];
   for (const c of candidates) {
-    const tsconfigPath = findNearest(c.file, root, 'tsconfig.json');
+    const tsconfigPath = findNearest(c.file, root, "tsconfig.json");
     if (tsconfigPath == null) continue;
     try {
       const routes = extractRoutes({
@@ -192,7 +192,7 @@ const validateServers = (candidates: RawServerCandidate[], root: string): Discov
       });
 
       if (routes.length === 0) continue;
-      const pkg = findNearest(c.file, root, 'package.json');
+      const pkg = findNearest(c.file, root, "package.json");
       const packageDir = pkg == null ? dirname(c.file) : dirname(pkg);
       out.push({
         appTypeFile: c.file,
@@ -304,7 +304,7 @@ const linkClients = (
 
   const byTsconfig = new Map<string, RawClientCandidate[]>();
   for (const c of clients) {
-    const tsconfigPath = findNearest(c.file, root, 'tsconfig.json');
+    const tsconfigPath = findNearest(c.file, root, "tsconfig.json");
     if (tsconfigPath == null) continue;
     let group = byTsconfig.get(tsconfigPath);
     if (group == null) {
@@ -337,7 +337,7 @@ const linkClients = (
           if (server != null) {
             const ctx = classifyHcCallContext(node);
             if (ctx.variableName != null) {
-              const pkg = findNearest(client.file, root, 'package.json');
+              const pkg = findNearest(client.file, root, "package.json");
               const clientPackageDir = pkg == null ? dirname(client.file) : dirname(pkg);
               bindings.push({
                 clientFile: client.file,
@@ -362,16 +362,16 @@ const linkClients = (
     for (const file of allTsFiles) {
       let content: string;
       try {
-        content = readFileSync(file, 'utf8');
+        content = readFileSync(file, "utf8");
       } catch {
         continue;
       }
       // Quick string-level pre-filter — most files won't mention any factory.
       if (!factoryNames.some((name) => content.includes(name))) continue;
       const sf = ts.createSourceFile(file, content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-      const tsconfigPath = findNearest(file, root, 'tsconfig.json');
+      const tsconfigPath = findNearest(file, root, "tsconfig.json");
       if (tsconfigPath == null) continue;
-      const pkg = findNearest(file, root, 'package.json');
+      const pkg = findNearest(file, root, "package.json");
       const clientPackageDir = pkg == null ? dirname(file) : dirname(pkg);
 
       const visit = (node: ts.Node): void => {

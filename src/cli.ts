@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { dirname, relative, resolve } from 'node:path';
-import { parseArgs } from 'node:util';
+import { dirname, relative, resolve } from "node:path";
+import { parseArgs } from "node:util";
 
 import {
   buildIgnoreFilter,
@@ -8,12 +8,12 @@ import {
   type HonoUnusedConfig,
   type IgnoreFilter,
   loadConfig,
-} from './config.ts';
-import { diffRoutes } from './diff.ts';
-import { type DiscoveryResult, discoverProject } from './discover.ts';
-import { extractRoutes } from './extract-routes.ts';
-import { findCallsites, listAdapters } from './find-callsites.ts';
-import type { DiffResult } from './types.ts';
+} from "./config.ts";
+import { diffRoutes } from "./diff.ts";
+import { type DiscoveryResult, discoverProject } from "./discover.ts";
+import { extractRoutes } from "./extract-routes.ts";
+import { findCallsites, listAdapters } from "./find-callsites.ts";
+import type { DiffResult } from "./types.ts";
 
 const HELP_TEXT = `Usage: hono-shaking [options]
 
@@ -79,7 +79,7 @@ interface CommonArgs {
 }
 
 interface ManualArgs extends CommonArgs {
-  mode: 'manual';
+  mode: "manual";
   serverTsconfig: string;
   appTypeFile: string;
   appTypeExport: string;
@@ -89,7 +89,7 @@ interface ManualArgs extends CommonArgs {
 }
 
 interface AutoArgs extends CommonArgs {
-  mode: 'auto';
+  mode: "auto";
   root: string;
   perBinding: boolean;
 }
@@ -99,22 +99,22 @@ type Args = ManualArgs | AutoArgs;
 const parseCli = (): Args => {
   const { values } = parseArgs({
     options: {
-      root: { type: 'string' },
-      'server-tsconfig': { type: 'string' },
-      'app-type-file': { type: 'string' },
-      'app-type-export': { type: 'string', default: 'AppType' },
-      'client-tsconfig': { type: 'string' },
-      'client-dir': { type: 'string' },
-      'client-name': { type: 'string', multiple: true },
-      exclude: { type: 'string', multiple: true },
-      json: { type: 'boolean', default: false },
-      'show-used': { type: 'boolean', default: false },
-      'per-binding': { type: 'boolean', default: false },
-      config: { type: 'string' },
-      'no-config': { type: 'boolean', default: false },
-      'fail-on-unused': { type: 'boolean', default: false },
-      'fail-on-orphans': { type: 'boolean', default: false },
-      help: { type: 'boolean', short: 'h', default: false },
+      root: { type: "string" },
+      "server-tsconfig": { type: "string" },
+      "app-type-file": { type: "string" },
+      "app-type-export": { type: "string", default: "AppType" },
+      "client-tsconfig": { type: "string" },
+      "client-dir": { type: "string" },
+      "client-name": { type: "string", multiple: true },
+      exclude: { type: "string", multiple: true },
+      json: { type: "boolean", default: false },
+      "show-used": { type: "boolean", default: false },
+      "per-binding": { type: "boolean", default: false },
+      config: { type: "string" },
+      "no-config": { type: "boolean", default: false },
+      "fail-on-unused": { type: "boolean", default: false },
+      "fail-on-orphans": { type: "boolean", default: false },
+      help: { type: "boolean", short: "h", default: false },
     },
     strict: true,
   });
@@ -127,18 +127,18 @@ const parseCli = (): Args => {
   const common: CommonArgs = {
     exclude: values.exclude ?? [],
     json: values.json,
-    showUsed: values['show-used'],
-    failOnUnused: values['fail-on-unused'],
-    failOnOrphans: values['fail-on-orphans'],
+    showUsed: values["show-used"],
+    failOnUnused: values["fail-on-unused"],
+    failOnOrphans: values["fail-on-orphans"],
     configPath: values.config ?? null,
-    noConfig: values['no-config'],
+    noConfig: values["no-config"],
   };
 
   const manualFlags: [string, string | undefined][] = [
-    ['server-tsconfig', values['server-tsconfig']],
-    ['app-type-file', values['app-type-file']],
-    ['client-tsconfig', values['client-tsconfig']],
-    ['client-dir', values['client-dir']],
+    ["server-tsconfig", values["server-tsconfig"]],
+    ["app-type-file", values["app-type-file"]],
+    ["client-tsconfig", values["client-tsconfig"]],
+    ["client-dir", values["client-dir"]],
   ];
   const manualProvided = manualFlags.filter(([, v]) => v != null);
 
@@ -146,9 +146,9 @@ const parseCli = (): Args => {
   // when the user just runs `hono-shaking` from the repo root).
   if (values.root != null || manualProvided.length === 0) {
     return {
-      mode: 'auto',
-      root: values.root ?? '.',
-      perBinding: values['per-binding'],
+      mode: "auto",
+      root: values.root ?? ".",
+      perBinding: values["per-binding"],
       ...common,
     };
   }
@@ -158,20 +158,20 @@ const parseCli = (): Args => {
   const missing = manualFlags.filter(([, v]) => v == null).map(([k]) => `--${k}`);
   if (missing.length > 0) {
     process.stderr.write(
-      `error: manual mode requires all four flags. Missing: ${missing.join(', ')}.\nTo auto-detect instead, drop the manual flags (or pass --root <dir>).\n\n`,
+      `error: manual mode requires all four flags. Missing: ${missing.join(", ")}.\nTo auto-detect instead, drop the manual flags (or pass --root <dir>).\n\n`,
     );
     printHelp();
     process.exit(2);
   }
 
   return {
-    mode: 'manual',
-    serverTsconfig: values['server-tsconfig']!,
-    appTypeFile: values['app-type-file']!,
-    appTypeExport: values['app-type-export'] ?? 'AppType',
-    clientTsconfig: values['client-tsconfig']!,
-    clientDir: values['client-dir']!,
-    clientNames: values['client-name'] ?? [],
+    mode: "manual",
+    serverTsconfig: values["server-tsconfig"]!,
+    appTypeFile: values["app-type-file"]!,
+    appTypeExport: values["app-type-export"] ?? "AppType",
+    clientTsconfig: values["client-tsconfig"]!,
+    clientDir: values["client-dir"]!,
+    clientNames: values["client-name"] ?? [],
     ...common,
   };
 };
@@ -179,7 +179,7 @@ const parseCli = (): Args => {
 const cwd = process.cwd();
 const rel = (p: string): string => relative(cwd, p) || p;
 
-const printHuman = (result: DiffResult, showUsed: boolean, indent = ''): void => {
+const printHuman = (result: DiffResult, showUsed: boolean, indent = ""): void => {
   const { unused, used, orphanCalls } = result;
   const totalDefined = unused.length + used.length;
 
@@ -193,7 +193,7 @@ const printHuman = (result: DiffResult, showUsed: boolean, indent = ''): void =>
     for (const r of unused) {
       process.stdout.write(`${indent}  ${r.method.padEnd(7)} ${r.path}\n`);
     }
-    process.stdout.write('\n');
+    process.stdout.write("\n");
   }
 
   if (orphanCalls.length > 0) {
@@ -205,7 +205,7 @@ const printHuman = (result: DiffResult, showUsed: boolean, indent = ''): void =>
         `${indent}  ${c.method.padEnd(7)} ${c.path}  (${rel(c.file)}:${c.line})\n`,
       );
     }
-    process.stdout.write('\n');
+    process.stdout.write("\n");
   }
 
   if (showUsed && used.length > 0) {
@@ -220,8 +220,8 @@ const printHuman = (result: DiffResult, showUsed: boolean, indent = ''): void =>
 
 interface FilteredDiff {
   diff: DiffResult;
-  ignoredUnused: DiffResult['unused'];
-  ignoredOrphans: DiffResult['orphanCalls'];
+  ignoredUnused: DiffResult["unused"];
+  ignoredOrphans: DiffResult["orphanCalls"];
 }
 
 /** Filter the diff against an ignore set and surface what was filtered. */
@@ -229,14 +229,14 @@ const applyIgnoreFilter = (diff: DiffResult, filter: IgnoreFilter | null): Filte
   if (filter == null) {
     return { diff, ignoredUnused: [], ignoredOrphans: [] };
   }
-  const ignoredUnused: DiffResult['unused'] = [];
-  const keepUnused: DiffResult['unused'] = [];
+  const ignoredUnused: DiffResult["unused"] = [];
+  const keepUnused: DiffResult["unused"] = [];
   for (const r of diff.unused) {
     if (filter.isRouteIgnored(r)) ignoredUnused.push(r);
     else keepUnused.push(r);
   }
-  const ignoredOrphans: DiffResult['orphanCalls'] = [];
-  const keepOrphans: DiffResult['orphanCalls'] = [];
+  const ignoredOrphans: DiffResult["orphanCalls"] = [];
+  const keepOrphans: DiffResult["orphanCalls"] = [];
   for (const c of diff.orphanCalls) {
     if (filter.isOrphanIgnored(c)) ignoredOrphans.push(c);
     else keepOrphans.push(c);
@@ -254,7 +254,7 @@ const resolveConfig = async (
   if (args.noConfig) return { config: null, configPath: null };
   let configPath: string | null;
   if (args.configPath == null) {
-    const root = args.mode === 'auto' ? resolve(args.root) : null;
+    const root = args.mode === "auto" ? resolve(args.root) : null;
     configPath = findConfigFile(cwd, root);
   } else {
     configPath = resolve(args.configPath);
@@ -288,8 +288,8 @@ const runManual = async (args: ManualArgs, filter: IgnoreFilter | null): Promise
       `${JSON.stringify({ ...result, ignored: { unused: ignoredUnused, orphans: ignoredOrphans } }, null, 2)}\n`,
     );
   } else {
-    process.stdout.write('# Summary\n');
-    printHuman(result, args.showUsed, '  ');
+    process.stdout.write("# Summary\n");
+    printHuman(result, args.showUsed, "  ");
     if (ignoredUnused.length + ignoredOrphans.length > 0) {
       process.stdout.write(
         `  ignored        : ${ignoredUnused.length} unused / ${ignoredOrphans.length} orphan (config)\n`,
@@ -303,8 +303,8 @@ const runManual = async (args: ManualArgs, filter: IgnoreFilter | null): Promise
 };
 
 interface PairResult {
-  server: DiscoveryResult['servers'][number];
-  binding: DiscoveryResult['bindings'][number];
+  server: DiscoveryResult["servers"][number];
+  binding: DiscoveryResult["bindings"][number];
   diff: DiffResult;
 }
 
@@ -330,7 +330,7 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
   interface Bucket {
     clientTsconfigPath: string;
     clientPackageDir: string;
-    bindings: DiscoveryResult['bindings'];
+    bindings: DiscoveryResult["bindings"];
   }
   const buckets = new Map<string, Bucket>();
   for (const b of discovery.bindings) {
@@ -349,7 +349,7 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
 
   // Extract each server's routes once; multiple bindings may share a server.
   const routesByServerKey = new Map<string, ReturnType<typeof extractRoutes>>();
-  const serverKey = (s: DiscoveryResult['servers'][number]): string =>
+  const serverKey = (s: DiscoveryResult["servers"][number]): string =>
     `${s.appTypeFile} ${s.exportName}`;
   for (const s of discovery.servers) {
     const k = serverKey(s);
@@ -390,11 +390,11 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
   // Aggregate per server: a route is "unused" only if no consumer of that
   // server hit it. The per-binding view (--per-binding) is shown separately.
   interface ServerAggregate {
-    server: DiscoveryResult['servers'][number];
-    consumers: { binding: DiscoveryResult['bindings'][number]; usedCount: number }[];
+    server: DiscoveryResult["servers"][number];
+    consumers: { binding: DiscoveryResult["bindings"][number]; usedCount: number }[];
     diff: DiffResult;
-    ignoredUnused: DiffResult['unused'];
-    ignoredOrphans: DiffResult['orphanCalls'];
+    ignoredUnused: DiffResult["unused"];
+    ignoredOrphans: DiffResult["orphanCalls"];
   }
   const aggByServer = new Map<string, ServerAggregate>();
   for (const p of pairResults) {
@@ -440,26 +440,26 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
       )}\n`,
     );
   } else {
-    process.stdout.write('# Discovered servers\n');
+    process.stdout.write("# Discovered servers\n");
     for (const s of discovery.servers) {
       process.stdout.write(`  ${rel(s.appTypeFile)} :: ${s.exportName} (${s.routeCount} routes)\n`);
     }
-    process.stdout.write('\n# Discovered bindings\n');
+    process.stdout.write("\n# Discovered bindings\n");
     for (const b of discovery.bindings) {
       process.stdout.write(
         `  ${rel(b.clientFile)} :: ${b.variableName}  →  ${rel(b.server.appTypeFile)} :: ${b.server.exportName}\n`,
       );
     }
-    process.stdout.write('\n');
+    process.stdout.write("\n");
 
     for (const agg of aggByServer.values()) {
       const consumerList = agg.consumers
         .map((c) => `${rel(c.binding.clientPackageDir)}::${c.binding.variableName}(${c.usedCount})`)
-        .join(', ');
+        .join(", ");
 
       process.stdout.write(`== ${rel(agg.server.packageDir)} :: ${agg.server.exportName} ==\n`);
       process.stdout.write(`  consumers: ${consumerList}\n`);
-      printHuman(agg.diff, args.showUsed, '  ');
+      printHuman(agg.diff, args.showUsed, "  ");
       if (agg.ignoredUnused.length + agg.ignoredOrphans.length > 0) {
         process.stdout.write(
           `  ignored        : ${agg.ignoredUnused.length} unused / ${agg.ignoredOrphans.length} orphan (config)\n`,
@@ -468,12 +468,12 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
     }
 
     if (args.perBinding) {
-      process.stdout.write('# Per-binding detail\n');
+      process.stdout.write("# Per-binding detail\n");
       for (const p of pairResults) {
         process.stdout.write(
           `-- ${rel(p.server.packageDir)} :: ${p.server.exportName}  ↔  ${rel(p.binding.clientPackageDir)} :: ${p.binding.variableName} --\n`,
         );
-        printHuman(p.diff, args.showUsed, '    ');
+        printHuman(p.diff, args.showUsed, "    ");
       }
     }
   }
@@ -492,9 +492,9 @@ const main = async (): Promise<void> => {
   if (!args.json) {
     const adapters = await listAdapters();
     if (adapters.length > 0) {
-      process.stderr.write(`# adapters loaded: ${adapters.join(', ')}\n`);
+      process.stderr.write(`# adapters loaded: ${adapters.join(", ")}\n`);
     } else {
-      process.stderr.write('# adapters loaded: (none — only .ts files were scanned)\n');
+      process.stderr.write("# adapters loaded: (none — only .ts files were scanned)\n");
     }
   }
 
@@ -505,7 +505,7 @@ const main = async (): Promise<void> => {
     process.stderr.write(`# config: ${rel(configPath)}\n`);
   }
 
-  const code = args.mode === 'auto' ? await runAuto(args, filter) : await runManual(args, filter);
+  const code = args.mode === "auto" ? await runAuto(args, filter) : await runManual(args, filter);
   process.exit(code);
 };
 

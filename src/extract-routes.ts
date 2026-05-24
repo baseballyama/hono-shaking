@@ -1,14 +1,14 @@
-import { resolve } from 'node:path';
+import { resolve } from "node:path";
 
-import ts from 'typescript';
+import ts from "typescript";
 
-import { type LoadedProgram, loadProgram } from './ts-program.ts';
-import type { DefinedRoute, HttpMethod } from './types.ts';
+import { type LoadedProgram, loadProgram } from "./ts-program.ts";
+import type { DefinedRoute, HttpMethod } from "./types.ts";
 
-const METHOD_KEYS = new Set(['get', 'post', 'put', 'delete', 'patch', 'options', 'head', 'all']);
+const METHOD_KEYS = new Set(["get", "post", "put", "delete", "patch", "options", "head", "all"]);
 
 const toMethod = (key: string): HttpMethod | null => {
-  if (!key.startsWith('$')) return null;
+  if (!key.startsWith("$")) return null;
   const lower = key.slice(1);
   if (!METHOD_KEYS.has(lower)) return null;
   return lower.toUpperCase() as HttpMethod;
@@ -55,7 +55,7 @@ const collectHonoSchemaTypes = (appTypeAlias: ts.Type, checker: ts.TypeChecker):
  */
 export const extractRoutes = (options: ExtractOptions): DefinedRoute[] => {
   const { tsconfigPath, appTypeFile } = options;
-  const exportName = options.exportName ?? 'AppType';
+  const exportName = options.exportName ?? "AppType";
   const loaded: LoadedProgram = loadProgram(tsconfigPath);
   const { program, checker } = loaded;
 
@@ -76,7 +76,7 @@ export const extractRoutes = (options: ExtractOptions): DefinedRoute[] => {
   if (target == null) {
     throw new Error(
       `Export "${exportName}" not found in ${absAppTypeFile}. ` +
-        `Available exports: ${moduleExports.map((e) => e.name).join(', ')}.`,
+        `Available exports: ${moduleExports.map((e) => e.name).join(", ")}.`,
     );
   }
 
@@ -103,7 +103,7 @@ export const extractRoutes = (options: ExtractOptions): DefinedRoute[] => {
       const pathSymbols = checker.getPropertiesOfType(branch);
       for (const pathSym of pathSymbols) {
         const path = pathSym.name;
-        if (!path.startsWith('/')) continue;
+        if (!path.startsWith("/")) continue;
         const pathType = checker.getTypeOfSymbolAtLocation(pathSym, sourceFile);
         for (const methodBranch of flattenTypes(pathType)) {
           const methodSymbols = checker.getPropertiesOfType(methodBranch);

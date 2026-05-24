@@ -1,6 +1,6 @@
-import type { FrameworkAdapter } from './adapter.ts';
-import { createSvelteAdapter } from './svelte.ts';
-import { createVueAdapter } from './vue.ts';
+import type { FrameworkAdapter } from "./adapter.ts";
+import { createSvelteAdapter } from "./svelte.ts";
+import { createVueAdapter } from "./vue.ts";
 
 /**
  * Try to load every built-in adapter. Each adapter returns `null` when its

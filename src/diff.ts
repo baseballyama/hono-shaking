@@ -1,4 +1,4 @@
-import type { CallSiteRef, DefinedRoute, DiffResult, RouteRef } from './types.ts';
+import type { CallSiteRef, DefinedRoute, DiffResult, RouteRef } from "./types.ts";
 
 const key = (r: RouteRef): string => `${r.method} ${r.path}`;
 
@@ -21,7 +21,7 @@ export const diffRoutes = (defined: DefinedRoute[], called: CallSiteRef[]): Diff
 
   const definedKeys = new Set(defined.map((r) => key(r)));
   const unused: DefinedRoute[] = [];
-  const used: DiffResult['used'] = [];
+  const used: DiffResult["used"] = [];
   for (const r of defined) {
     const sites = callsByKey.get(key(r)) ?? [];
     if (sites.length === 0) unused.push(r);
