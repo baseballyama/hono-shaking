@@ -10,7 +10,7 @@ client source for `hc<>()` call sites, and reports the routes the server
 defines that nobody actually calls.
 
 ```
-$ npx hono-shaking --root .
+$ npx hono-shaking
 
 # Discovered servers
   apps/api/src/index.ts :: AppType (124 routes)
@@ -96,11 +96,14 @@ bundled `typescript` runs alongside, reading the same `tsconfig.json`.
 
 ### Auto-detect (recommended)
 
-From the repository root, just point the tool at the root:
+Run with no arguments from the repository root:
 
 ```bash
-npx hono-shaking --root .
+npx hono-shaking
 ```
+
+This is equivalent to `--root .`. Pass `--root <dir>` to point at a
+different location.
 
 It walks the tree, finds every `export type X = typeof Y` that looks like a
 Hono app, finds every `hc<T>(...)` call, and resolves each `T` through the
@@ -134,7 +137,7 @@ npx hono-shaking \
 
 ```bash
 # Fail the build if a PR introduces an unused route (or call sites with no matching server route).
-npx hono-shaking --root . --fail-on-unused --fail-on-orphans
+npx hono-shaking --fail-on-unused --fail-on-orphans
 ```
 
 The exit code reflects findings *after* the config-driven ignore list is
@@ -144,7 +147,7 @@ a non-hc endpoint without breaking the build.
 ### JSON output
 
 ```bash
-npx hono-shaking --root . --json > report.json
+npx hono-shaking --json > report.json
 ```
 
 Diagnostic messages (`# adapters loaded: ...`, `# config: ...`) go to stderr

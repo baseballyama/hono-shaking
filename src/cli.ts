@@ -17,14 +17,17 @@ import type { DiffResult } from './types.ts';
 
 const HELP_TEXT = `Usage: hono-shaking [options]
 
-Auto-detect mode (single flag):
-  --root <dir>               Repository root to auto-discover server/client
-                             pairs. Scans for "export type X = typeof Y"
-                             (servers) and "hc<X>(...)" (clients), then
-                             resolves each hc<T> to a server via the TS
-                             Compiler API to build bindings.
+Default (no arguments): auto-detect against the current working directory.
+Equivalent to passing \`--root .\`.
 
-Manual mode (specify both sides):
+Auto-detect mode:
+  --root <dir>               Repository root to auto-discover server/client
+                             pairs (defaults to "."). Scans for
+                             "export type X = typeof Y" (servers) and
+                             "hc<X>(...)" (clients), then resolves each
+                             hc<T> to a server via the TS Compiler API.
+
+Manual mode (specify all four):
   --server-tsconfig <path>   tsconfig.json of the server-side package
   --app-type-file <path>     Source file that exports the AppType
   --client-tsconfig <path>   tsconfig.json of the client-side package
@@ -131,27 +134,31 @@ const parseCli = (): Args => {
     noConfig: values['no-config'],
   };
 
-  if (values.root != null) {
-    return {
-      mode: 'auto',
-      root: values.root,
-      perBinding: values['per-binding'],
-      ...common,
-    };
-  }
-
-  const required: [string, string | undefined][] = [
+  const manualFlags: [string, string | undefined][] = [
     ['server-tsconfig', values['server-tsconfig']],
     ['app-type-file', values['app-type-file']],
     ['client-tsconfig', values['client-tsconfig']],
     ['client-dir', values['client-dir']],
   ];
+  const manualProvided = manualFlags.filter(([, v]) => v != null);
 
-  const missing = required.filter(([, v]) => v == null).map(([k]) => `--${k}`);
+  // Auto mode: explicit `--root`, or no manual flags at all (the default
+  // when the user just runs `hono-shaking` from the repo root).
+  if (values.root != null || manualProvided.length === 0) {
+    return {
+      mode: 'auto',
+      root: values.root ?? '.',
+      perBinding: values['per-binding'],
+      ...common,
+    };
+  }
 
+  // Manual mode: any manual flag opts in, but all four must be present so
+  // we don't silently fall back to auto when one is missing.
+  const missing = manualFlags.filter(([, v]) => v == null).map(([k]) => `--${k}`);
   if (missing.length > 0) {
     process.stderr.write(
-      `error: provide --root <dir> for auto-detect, or the four manual options.\nmissing: ${missing.join(', ')}\n\n`,
+      `error: manual mode requires all four flags. Missing: ${missing.join(', ')}.\nTo auto-detect instead, drop the manual flags (or pass --root <dir>).\n\n`,
     );
     printHelp();
     process.exit(2);
