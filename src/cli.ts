@@ -13,6 +13,7 @@ import { diffRoutes } from "./diff.ts";
 import { type DiscoveryResult, discoverProject } from "./discover.ts";
 import { extractRoutes } from "./extract-routes.ts";
 import { findCallsites, listAdapters } from "./find-callsites.ts";
+import { startSpinner } from "./spinner.ts";
 import type { DiffResult } from "./types.ts";
 
 const HELP_TEXT = `Usage: hono-shaking [options]
@@ -265,11 +266,16 @@ const resolveConfig = async (
 };
 
 const runManual = async (args: ManualArgs, filter: IgnoreFilter | null): Promise<number> => {
+  const showSpinner = !args.json;
+  const spinner = showSpinner ? startSpinner("Extracting server routes…") : null;
+
   const defined = extractRoutes({
     tsconfigPath: args.serverTsconfig,
     appTypeFile: args.appTypeFile,
     exportName: args.appTypeExport,
   });
+
+  spinner?.update(`Scanning ${rel(args.clientDir)} for hc calls…`);
 
   const called = await findCallsites({
     tsconfigPath: args.clientTsconfig,
@@ -282,6 +288,7 @@ const runManual = async (args: ManualArgs, filter: IgnoreFilter | null): Promise
 
   const raw = diffRoutes(defined, called);
   const { diff: result, ignoredUnused, ignoredOrphans } = applyIgnoreFilter(raw, filter);
+  spinner?.stop();
 
   if (args.json) {
     process.stdout.write(
@@ -309,15 +316,25 @@ interface PairResult {
 }
 
 const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<number> => {
+  // Spinner only when stdout/stderr is a TTY and we're not emitting JSON
+  // (JSON consumers redirect stderr too in practice).
+  const showSpinner = !args.json;
+  const spinner = showSpinner ? startSpinner("Discovering server / client pairs…") : null;
+
   const discovery = discoverProject(args.root);
+  spinner?.update(
+    `Discovered ${discovery.servers.length} server${discovery.servers.length === 1 ? "" : "s"} / ${discovery.bindings.length} binding${discovery.bindings.length === 1 ? "" : "s"} — extracting routes…`,
+  );
 
   if (discovery.servers.length === 0) {
+    spinner?.stop();
     process.stderr.write(
       `error: no Hono server (export type X = typeof Y) found under ${args.root}\n`,
     );
     return 2;
   }
   if (discovery.bindings.length === 0) {
+    spinner?.stop();
     process.stderr.write(
       `error: no hc<...> client binding resolved to any discovered server under ${args.root}\n`,
     );
@@ -351,7 +368,12 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
   const routesByServerKey = new Map<string, ReturnType<typeof extractRoutes>>();
   const serverKey = (s: DiscoveryResult["servers"][number]): string =>
     `${s.appTypeFile} ${s.exportName}`;
+  let serverIdx = 0;
   for (const s of discovery.servers) {
+    serverIdx++;
+    spinner?.update(
+      `Extracting routes (${serverIdx}/${discovery.servers.length}): ${rel(s.appTypeFile)} :: ${s.exportName}`,
+    );
     const k = serverKey(s);
     if (!routesByServerKey.has(k)) {
       routesByServerKey.set(
@@ -366,7 +388,13 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
   }
 
   const pairResults: PairResult[] = [];
-  for (const bucket of buckets.values()) {
+  const buckets_arr = [...buckets.values()];
+  let bucketIdx = 0;
+  for (const bucket of buckets_arr) {
+    bucketIdx++;
+    spinner?.update(
+      `Scanning client (${bucketIdx}/${buckets_arr.length}): ${rel(bucket.clientPackageDir)}`,
+    );
     const variableNames = [...new Set(bucket.bindings.map((b) => b.variableName))];
     const calls = await findCallsites({
       tsconfigPath: bucket.clientTsconfigPath,
@@ -386,6 +414,8 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
       });
     }
   }
+
+  spinner?.stop();
 
   // Aggregate per server: a route is "unused" only if no consumer of that
   // server hit it. The per-binding view (--per-binding) is shown separately.
