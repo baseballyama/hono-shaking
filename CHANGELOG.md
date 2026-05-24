@@ -1,5 +1,13 @@
 # hono-shaking
 
+## 0.1.2
+
+### Patch Changes
+
+- f628033: Internal toolchain swap: lint moved from biome to oxlint, format moved
+  from biome to oxfmt. No user-facing behaviour change; published
+  artefacts are identical except for source quote style.
+
 ## 0.1.1
 
 ### Patch Changes
