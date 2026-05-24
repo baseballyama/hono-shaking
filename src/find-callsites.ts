@@ -1,7 +1,10 @@
-import { resolve, sep } from 'node:path';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 
 import ts from 'typescript';
 
+import type { FrameworkAdapter } from './adapters/adapter.ts';
+import { loadBuiltinAdapters } from './adapters/registry.ts';
 import { loadProgram } from './ts-program.ts';
 import type { CallSiteRef, HttpMethod } from './types.ts';
 
@@ -31,6 +34,12 @@ export interface FindOptions {
    * the auto-discovery flow to scope a single scan to a known binding name.
    */
   restrictToClientNames: string[] | null;
+  /**
+   * Framework adapters to use for non-TypeScript files (.svelte, .vue, ...).
+   * Pass `null` to auto-load every built-in adapter whose optional peer
+   * dependency is installed.
+   */
+  adapters: FrameworkAdapter[] | null;
 }
 
 const segmentsToPath = (segments: string[]): string => `/${segments.join('/')}`;
@@ -136,21 +145,22 @@ const collectClientNamesFromProgram = (program: ts.Program): Set<string> => {
   return names;
 };
 
-/**
- * Walk every source file in `includeDir` for hc call sites. Yields
- * `CallSiteRef`s annotated with the matched client name so a downstream diff
- * can group them by binding.
- */
-export const findCallsites = (options: FindOptions): CallSiteRef[] => {
-  const { tsconfigPath, includeDir } = options;
-  const exclude = options.exclude ?? [];
-  const extraClientNames = options.knownClientNames ?? [];
-  const restrictToClientNames = options.restrictToClientNames;
-  const absInclude = resolve(includeDir) + sep;
+interface TsScanResult {
+  calls: CallSiteRef[];
+  clientNames: Set<string>;
+}
 
+interface TsScanOptions {
+  tsconfigPath: string;
+  absInclude: string;
+  exclude: string[];
+  extraClientNames: string[];
+  restrictToClientNames: string[] | null;
+}
+
+const scanTsFiles = (opts: TsScanOptions): TsScanResult => {
+  const { tsconfigPath, absInclude, exclude, extraClientNames, restrictToClientNames } = opts;
   const { program, checker } = loadProgram(tsconfigPath);
-
-  // Either lock to the caller-supplied whitelist or auto-discover + augment.
   const clientNames =
     restrictToClientNames == null
       ? new Set<string>([...collectClientNamesFromProgram(program), ...extraClientNames])
@@ -199,12 +209,158 @@ export const findCallsites = (options: FindOptions): CallSiteRef[] => {
     visit(sf, sf);
   }
 
-  calls.sort((a, b) => {
+  return { calls, clientNames };
+};
+
+interface AdapterMatch {
+  file: string;
+  adapter: FrameworkAdapter;
+}
+
+const SKIP_WALK_DIRS = new Set(['node_modules', '.svelte-kit', 'dist', '.git']);
+
+const listAdapterFiles = (
+  dir: string,
+  exclude: string[],
+  adapters: FrameworkAdapter[],
+): AdapterMatch[] => {
+  const out: AdapterMatch[] = [];
+  const walk = (cur: string): void => {
+    let entries: string[];
+    try {
+      entries = readdirSync(cur);
+    } catch (err) {
+      console.warn(`hono-shaking: skip ${cur}: ${String(err)}`);
+      return;
+    }
+    for (const name of entries) {
+      const p = join(cur, name);
+      if (exclude.some((needle) => p.includes(needle))) continue;
+      const stat = statSync(p);
+      if (stat.isDirectory()) {
+        if (SKIP_WALK_DIRS.has(name)) continue;
+        walk(p);
+      } else if (stat.isFile()) {
+        const adapter = adapters.find((a) => a.matches(p));
+        if (adapter != null) out.push({ file: p, adapter });
+      }
+    }
+  };
+
+  walk(dir);
+  return out;
+};
+
+const scanWithAdapter = (
+  file: string,
+  adapter: FrameworkAdapter,
+  clientNames: Set<string>,
+): CallSiteRef[] => {
+  let content: string;
+  try {
+    content = readFileSync(file, 'utf8');
+  } catch (err) {
+    console.warn(`hono-shaking: skip ${file}: ${String(err)}`);
+    return [];
+  }
+
+  const transformed = adapter.transform(file, content);
+  if (transformed == null) return [];
+
+  const sf = ts.createSourceFile(
+    file,
+    transformed.code,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+
+  const calls: CallSiteRef[] = [];
+
+  // Adapter scans have no type checker, so the leaf gate cannot apply. We
+  // rely on the client-name whitelist to keep precision: only chains rooted
+  // at a known hc variable are emitted.
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      if (ts.isPropertyAccessExpression(callee)) {
+        const method = toMethod(callee.name.text);
+        if (method != null) {
+          const chain = walkChainRaw(callee.expression);
+          if (chain != null) {
+            const truncated = truncateAtClient(chain, clientNames);
+            if (truncated != null && truncated.segments.length > 0) {
+              const { line, character } = sf.getLineAndCharacterOfPosition(
+                callee.name.getStart(sf),
+              );
+
+              // ts.SourceFile reports 0-based line / 0-based character. The
+              // adapter contract expects 1-based line / 0-based column on
+              // input and returns 1-based line / 1-based column.
+              const orig = transformed.resolvePosition(line + 1, character);
+
+              calls.push({
+                method,
+                path: segmentsToPath(truncated.segments),
+                file,
+                line: orig?.line ?? line + 1,
+                column: orig?.column ?? character + 1,
+                matchedClientName: truncated.matchedName,
+              });
+            }
+          }
+        }
+      }
+    }
+    node.forEachChild(visit);
+  };
+
+  visit(sf);
+  return calls;
+};
+
+/**
+ * Walk every source file in `includeDir` for hc call sites. Yields
+ * `CallSiteRef`s annotated with the matched client name so a downstream diff
+ * can group them by binding.
+ */
+export const findCallsites = async (options: FindOptions): Promise<CallSiteRef[]> => {
+  const { tsconfigPath, includeDir } = options;
+  const exclude = options.exclude ?? [];
+  const knownClientNames = options.knownClientNames ?? [];
+  const restrictToClientNames = options.restrictToClientNames;
+  const adapters = options.adapters ?? (await loadBuiltinAdapters());
+  const absInclude = resolve(includeDir) + sep;
+
+  const tsResult = scanTsFiles({
+    tsconfigPath,
+    absInclude,
+    exclude,
+    extraClientNames: knownClientNames,
+    restrictToClientNames,
+  });
+
+  const adapterCalls: CallSiteRef[] = [];
+  if (adapters.length > 0 && tsResult.clientNames.size > 0) {
+    const adapterFiles = listAdapterFiles(absInclude, exclude, adapters);
+    for (const { file, adapter } of adapterFiles) {
+      adapterCalls.push(...scanWithAdapter(file, adapter, tsResult.clientNames));
+    }
+  }
+
+  const all = [...tsResult.calls, ...adapterCalls];
+  all.sort((a, b) => {
     const byFile = a.file.localeCompare(b.file);
     if (byFile === 0) {
       return a.line === b.line ? a.column - b.column : a.line - b.line;
     }
     return byFile;
   });
-  return calls;
+  return all;
+};
+
+/** Names of adapters that successfully loaded (diagnostics helper). */
+export const listAdapters = async (): Promise<string[]> => {
+  const adapters = await loadBuiltinAdapters();
+  return adapters.map((a) => a.name);
 };
