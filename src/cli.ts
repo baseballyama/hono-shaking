@@ -14,7 +14,7 @@ import { diffRoutes } from "./diff.ts";
 import { type DiscoveryResult, discoverProject } from "./discover.ts";
 import { extractRoutes } from "./extract-routes.ts";
 import { findCallsites, listAdapters } from "./find-callsites.ts";
-import { startSpinner } from "./spinner.ts";
+import { info, startStep } from "./progress.ts";
 import type { DiffResult } from "./types.ts";
 
 const HELP_TEXT = `Usage: hono-shaking [options]
@@ -181,13 +181,6 @@ const parseCli = (): Args => {
 
 const cwd = process.cwd();
 const rel = (p: string): string => relative(cwd, p) || p;
-
-/** Human-friendly duration: 850ms, 1.2s, 14.0s … */
-const ms = (start: number): string => {
-  const elapsed = Date.now() - start;
-  if (elapsed < 1000) return `${elapsed}ms`;
-  return `${(elapsed / 1000).toFixed(1)}s`;
-};
 
 const tick = green("✓");
 const cross = red("✗");
@@ -417,20 +410,21 @@ const resolveConfig = async (
 };
 
 const runManual = async (args: ManualArgs, filter: IgnoreFilter | null): Promise<number> => {
-  const spinner = args.json ? null : startSpinner("Extracting server routes (may take a moment)…");
+  const verbose = !args.json;
 
-  const tExtract = Date.now();
+  const extractStep = verbose ? startStep(`Extracting server routes (may take a moment)…`) : null;
   const defined = extractRoutes({
     tsconfigPath: args.serverTsconfig,
     appTypeFile: args.appTypeFile,
     exportName: args.appTypeExport,
   });
-  spinner?.log(
-    `${tick} Extracted ${cyan(String(defined.length))} routes from ${bold(rel(args.appTypeFile))} ${dim(`(${ms(tExtract)})`)}`,
+  extractStep?.done(
+    `Extracted ${cyan(String(defined.length))} routes from ${bold(rel(args.appTypeFile))}`,
   );
 
-  spinner?.update(`Scanning ${rel(args.clientDir)} (may take a moment)…`);
-  const tScan = Date.now();
+  const scanStep = verbose
+    ? startStep(`Scanning ${rel(args.clientDir)} (may take a moment)…`)
+    : null;
   const called = await findCallsites({
     tsconfigPath: args.clientTsconfig,
     includeDir: args.clientDir,
@@ -439,13 +433,12 @@ const runManual = async (args: ManualArgs, filter: IgnoreFilter | null): Promise
     restrictToClientNames: null,
     adapters: null,
   });
-  spinner?.log(
-    `${tick} Scanned ${cyan(rel(args.clientDir))}, found ${cyan(String(called.length))} hc call site${called.length === 1 ? "" : "s"} ${dim(`(${ms(tScan)})`)}`,
+  scanStep?.done(
+    `Scanned ${cyan(rel(args.clientDir))}, found ${cyan(String(called.length))} hc call site${called.length === 1 ? "" : "s"}`,
   );
 
   const raw = diffRoutes(defined, called);
   const { diff: result, ignoredUnused, ignoredOrphans } = applyIgnoreFilter(raw, filter);
-  await spinner?.stop();
 
   if (args.json) {
     process.stdout.write(
@@ -487,23 +480,21 @@ const runManual = async (args: ManualArgs, filter: IgnoreFilter | null): Promise
 };
 
 const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<number> => {
-  const spinner = args.json ? null : startSpinner("Discovering server / client pairs…");
+  const verbose = !args.json;
 
-  const tDiscover = Date.now();
+  const discoverStep = verbose ? startStep("Discovering server / client pairs…") : null;
   const discovery = discoverProject(args.root);
-  spinner?.log(
-    `${tick} Discovered ${cyan(String(discovery.servers.length))} server${discovery.servers.length === 1 ? "" : "s"} / ${cyan(String(discovery.bindings.length))} binding${discovery.bindings.length === 1 ? "" : "s"} ${dim(`(${ms(tDiscover)})`)}`,
+  discoverStep?.done(
+    `Discovered ${cyan(String(discovery.servers.length))} server${discovery.servers.length === 1 ? "" : "s"} / ${cyan(String(discovery.bindings.length))} binding${discovery.bindings.length === 1 ? "" : "s"}`,
   );
 
   if (discovery.servers.length === 0) {
-    await spinner?.stop();
     process.stderr.write(
       `${cross} ${bold("No Hono server found")} (looked for "export type X = typeof Y" under ${args.root}).\n`,
     );
     return 2;
   }
   if (discovery.bindings.length === 0) {
-    await spinner?.stop();
     process.stderr.write(
       `${cross} ${bold("No hc<...> client binding")} resolved to any discovered server under ${args.root}.\n`,
     );
@@ -537,10 +528,11 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
   let serverIdx = 0;
   for (const s of discovery.servers) {
     serverIdx++;
-    spinner?.update(
-      `Extracting routes (${serverIdx}/${discovery.servers.length}): ${formatServerLabel(s)} (may take a moment)…`,
-    );
-    const t = Date.now();
+    const step = verbose
+      ? startStep(
+          `Extracting routes (${serverIdx}/${discovery.servers.length}): ${formatServerLabel(s)} (may take a moment)…`,
+        )
+      : null;
     const k = serverKey(s);
     if (!routesByServerKey.has(k)) {
       routesByServerKey.set(
@@ -553,8 +545,8 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
       );
     }
     const routes = routesByServerKey.get(k)!;
-    spinner?.log(
-      `${tick} Extracted ${cyan(String(routes.length))} routes from ${bold(formatServerLabel(s))} ${dim(`(${ms(t)})`)}`,
+    step?.done(
+      `Extracted ${cyan(String(routes.length))} routes from ${bold(formatServerLabel(s))}`,
     );
   }
 
@@ -568,10 +560,11 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
   let bucketIdx = 0;
   for (const bucket of bucketArr) {
     bucketIdx++;
-    spinner?.update(
-      `Scanning client (${bucketIdx}/${bucketArr.length}): ${rel(bucket.clientPackageDir)} (may take a moment)…`,
-    );
-    const t = Date.now();
+    const step = verbose
+      ? startStep(
+          `Scanning client (${bucketIdx}/${bucketArr.length}): ${rel(bucket.clientPackageDir)} (may take a moment)…`,
+        )
+      : null;
     const variableNames = [...new Set(bucket.bindings.map((b) => b.variableName))];
     const calls = await findCallsites({
       tsconfigPath: bucket.clientTsconfigPath,
@@ -590,8 +583,8 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
         diff: diffRoutes(defined, myCalls),
       });
     }
-    spinner?.log(
-      `${tick} Scanned ${bold(rel(bucket.clientPackageDir))}, ${cyan(String(calls.length))} call${calls.length === 1 ? "" : "s"} ${dim(`(${ms(t)})`)}`,
+    step?.done(
+      `Scanned ${bold(rel(bucket.clientPackageDir))}, ${cyan(String(calls.length))} call${calls.length === 1 ? "" : "s"}`,
     );
   }
 
@@ -623,8 +616,6 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
     agg.ignoredUnused = filtered.ignoredUnused;
     agg.ignoredOrphans = filtered.ignoredOrphans;
   }
-
-  await spinner?.stop();
 
   // Also append servers with no consumer (untouched) so they appear in the table.
   const aggs: ServerAggregate[] = [];
@@ -679,9 +670,9 @@ const main = async (): Promise<void> => {
   if (!args.json) {
     const adapters = await listAdapters();
     if (adapters.length > 0) {
-      process.stderr.write(`${dim(`# adapters loaded: ${adapters.join(", ")}`)}\n`);
+      info(dim(`# adapters loaded: ${adapters.join(", ")}`));
     } else {
-      process.stderr.write(dim("# adapters loaded: (none — only .ts files were scanned)\n"));
+      info(dim("# adapters loaded: (none — only .ts files were scanned)"));
     }
   }
 
@@ -689,7 +680,7 @@ const main = async (): Promise<void> => {
   const filter =
     config == null || configPath == null ? null : buildIgnoreFilter(config, dirname(configPath));
   if (!args.json && configPath != null) {
-    process.stderr.write(`${dim(`# config: ${rel(configPath)}`)}\n`);
+    info(dim(`# config: ${rel(configPath)}`));
   }
 
   const code = args.mode === "auto" ? await runAuto(args, filter) : await runManual(args, filter);
