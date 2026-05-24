@@ -1,5 +1,15 @@
 # hono-shaking
 
+## 0.2.0
+
+### Minor Changes
+
+- 5db1076: Show a stderr progress spinner during the slow phases of `--root` mode
+  (discovery, per-server route extraction, per-client scan). Suppressed
+  under `--json` and on non-TTY stderr; in the non-TTY fallback the same
+  phase labels are emitted as one-shot `# ...` lines so logs remain
+  self-documenting.
+
 ## 0.1.4
 
 ### Patch Changes
