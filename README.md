@@ -296,13 +296,29 @@ for (const binding of bindings) {
 
 ## Known limitations
 
-- **Aliased `hc` imports**: `import { hc as createClient } from 'hono/client'`
-  isn't detected. Use the imported name verbatim.
 - **Computed access**: `client[someVar].$get()` with a non-literal key is
   skipped. Literal keys (`client['users'].$get()`) work fine.
 - **Cross-repo clients**: a `.ts` file outside the analyzed program isn't
   visible. Run hono-shaking in the repo where both server and client live,
   or run it twice (once per repo) and union the results.
+
+### Imports we *do* handle
+
+`hc` resolution goes through the TypeScript symbol resolver, so any shape
+the compiler can follow works — including aliases, namespace imports, and
+re-exports through your own barrels:
+
+```ts
+import { hc } from 'hono/client';
+import { hc as createClient } from 'hono/client';
+import * as hono from 'hono/client';
+//        ^ then called as hono.hc<T>(...)
+
+// Re-export through your own barrel:
+//   @org/backend/client.ts:  export { hc } from 'hono/client';
+import { hc } from '@org/backend/client';
+import { hc as createClient } from '@org/backend/client';
+```
 
 ## License
 

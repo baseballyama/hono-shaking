@@ -9,6 +9,7 @@ import { dirname, join, resolve } from 'node:path';
 import ts from 'typescript';
 
 import { extractRoutes } from './extract-routes.ts';
+import { isHcCallee } from './hc-symbol.ts';
 import { loadProgram } from './ts-program.ts';
 
 const SKIP_DIRS = new Set([
@@ -81,12 +82,10 @@ const findNearest = (file: string, root: string, name: string): string | null =>
 
 // `export type X = typeof Y` — narrow enough to skip re-exports and shadow declarations.
 const SERVER_TYPE_RE = /export\s+type\s+(\w+)\s*=\s*typeof\s+\w+/g;
-// `hc<X>(...)` — captures the type argument. We deliberately don't require an
-// `import { hc } from 'hono/client'` line because real-world projects re-export
-// `hc` from their own client barrel (`@org/backend/client`), and a literal
-// import check would miss those.
-const HC_CALL_RE = /\bhc\s*<\s*(\w+)\s*>\s*\(/g;
 const HONO_IMPORT_RE = /from\s+['"]hono(?:\/[\w-]+)?['"]/;
+// Generic-call shape `<word><X>(`. The caller name is captured so we can match
+// it against the locally-bound names for `hc` collected from import statements.
+const GENERIC_CALL_RE = /\b(\w+)\s*<\s*(\w+)\s*>\s*\(/g;
 
 interface RawServerCandidate {
   file: string;
@@ -116,6 +115,35 @@ interface RawClientCandidate {
   usedTypes: string[];
 }
 
+/**
+ * Local names that refer to Hono's `hc` in this file. Catches:
+ *   - `import { hc } from 'hono/client'`              → "hc"
+ *   - `import { hc as createClient } from 'hono/client'` → "createClient"
+ *   - `import { hc, type X } from 'hono/client'`      → "hc"
+ *
+ * We always also include the bare literal "hc" because many codebases
+ * re-export `hc` through a local barrel and the consumer just writes
+ * `import { hc } from '@org/barrel'` — there's no `'hono/client'` literal
+ * to key on, but the local name is still `hc`.
+ */
+const collectHcLocalNames = (content: string): Set<string> => {
+  const names = new Set<string>(['hc']);
+  const namedImportRe = /import\s*(?:type\s+)?\{([^}]+)\}\s*from\s*['"]hono\/client['"]/g;
+  for (const m of content.matchAll(namedImportRe)) {
+    const specs = m[1];
+    if (specs == null) continue;
+    for (const spec of specs.split(',')) {
+      const trimmed = spec.trim();
+      // "hc" or "hc as Y" (optionally prefixed by `type `, which we just ignore).
+      const match = trimmed.match(/^(?:type\s+)?hc(?:\s+as\s+(\w+))?$/);
+      if (match) {
+        names.add(match[1] ?? 'hc');
+      }
+    }
+  }
+  return names;
+};
+
 const detectClientCandidates = (files: string[]): RawClientCandidate[] => {
   const out: RawClientCandidate[] = [];
   for (const file of files) {
@@ -125,9 +153,13 @@ const detectClientCandidates = (files: string[]): RawClientCandidate[] => {
     } catch {
       continue;
     }
+    const hcNames = collectHcLocalNames(content);
     const usedTypes = new Set<string>();
-    for (const m of content.matchAll(HC_CALL_RE)) {
-      if (m[1] != null) usedTypes.add(m[1]);
+    for (const m of content.matchAll(GENERIC_CALL_RE)) {
+      const callerName = m[1];
+      const typeName = m[2];
+      if (callerName == null || typeName == null) continue;
+      if (hcNames.has(callerName)) usedTypes.add(typeName);
     }
     if (usedTypes.size > 0) out.push({ file, usedTypes: [...usedTypes] });
   }
@@ -300,11 +332,7 @@ const linkClients = (
       if (sf == null) continue;
 
       const visit = (node: ts.Node): void => {
-        if (
-          ts.isCallExpression(node) &&
-          ts.isIdentifier(node.expression) &&
-          node.expression.text === 'hc'
-        ) {
+        if (ts.isCallExpression(node) && isHcCallee(node.expression, checker)) {
           const server = resolveAppTypeServer(node.typeArguments?.[0], checker, servers);
           if (server != null) {
             const ctx = classifyHcCallContext(node);

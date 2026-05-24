@@ -50,6 +50,20 @@ describe('findCallsites', () => {
     expect(callsByKey(calls)).toEqual(['GET /posts', 'POST /posts']);
   });
 
+  it('handles aliased hc import (import { hc as createClient })', async () => {
+    const calls = await findCallsites({
+      tsconfigPath: `${fixture('aliased-hc')}/tsconfig.json`,
+      includeDir: fixture('aliased-hc'),
+      exclude: null,
+      knownClientNames: null,
+      restrictToClientNames: null,
+      adapters: [],
+    });
+
+    expect(callsByKey(calls)).toEqual(['GET /widgets', 'POST /widgets']);
+    for (const c of calls) expect(c.matchedClientName).toBe('widgetClient');
+  });
+
   it('detects calls inside .vue files via the Vue adapter', async () => {
     const calls = await findCallsites({
       tsconfigPath: `${fixture('vue')}/tsconfig.json`,

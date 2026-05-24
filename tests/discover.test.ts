@@ -24,4 +24,11 @@ describe('discoverProject', () => {
     const names = bindings.map((b) => b.variableName).sort();
     expect(names).toContain('orgClient');
   });
+
+  it('detects bindings via aliased hc import', () => {
+    const { bindings } = discoverProject(fixture('aliased-hc'));
+
+    const names = bindings.map((b) => b.variableName).sort();
+    expect(names).toContain('widgetClient');
+  });
 });

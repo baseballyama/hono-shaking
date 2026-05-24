@@ -5,6 +5,7 @@ import ts from 'typescript';
 
 import type { FrameworkAdapter } from './adapters/adapter.ts';
 import { loadBuiltinAdapters } from './adapters/registry.ts';
+import { isHcCallee } from './hc-symbol.ts';
 import { loadProgram } from './ts-program.ts';
 import type { CallSiteRef, HttpMethod } from './types.ts';
 
@@ -115,21 +116,26 @@ const truncateAtClient = (raw: RawChain, clientNames: Set<string>): TruncateResu
 };
 
 /**
- * Lightweight AST scan to find `const X = hc<...>(...)` patterns. The
- * variable name is collected as a known hc client root; we do *not* trust
- * the chain truncator to discover roots on its own because that would
- * conflate "I called .$get on a custom object" with "I called .$get on a
- * Hono client."
+ * Find `const X = hc<...>(...)` bindings across the program. We use the
+ * symbol resolver to identify Hono's `hc` so that aliased imports
+ * (`import { hc as createClient }`), namespace imports, and re-exports
+ * through local barrels are all handled in the same code path.
+ *
+ * Recording variable names explicitly (rather than letting the chain
+ * truncator discover roots) keeps the analyzer from conflating "I called
+ * .$get on a custom object" with "I called .$get on a Hono client."
  */
-const collectClientNamesFromProgram = (program: ts.Program): Set<string> => {
+const collectClientNamesFromProgram = (
+  program: ts.Program,
+  checker: ts.TypeChecker,
+): Set<string> => {
   const names = new Set<string>();
   const visit = (node: ts.Node): void => {
     if (ts.isVariableDeclaration(node) && node.initializer != null) {
       const init = node.initializer;
       if (
         ts.isCallExpression(init) &&
-        ts.isIdentifier(init.expression) &&
-        init.expression.text === 'hc' &&
+        isHcCallee(init.expression, checker) &&
         ts.isIdentifier(node.name)
       ) {
         names.add(node.name.text);
@@ -163,7 +169,7 @@ const scanTsFiles = (opts: TsScanOptions): TsScanResult => {
   const { program, checker } = loadProgram(tsconfigPath);
   const clientNames =
     restrictToClientNames == null
-      ? new Set<string>([...collectClientNamesFromProgram(program), ...extraClientNames])
+      ? new Set<string>([...collectClientNamesFromProgram(program, checker), ...extraClientNames])
       : new Set<string>(restrictToClientNames);
 
   const calls: CallSiteRef[] = [];
