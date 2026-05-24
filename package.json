@@ -1,6 +1,6 @@
 {
   "name": "hono-shaking",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Find unused Hono RPC endpoints. Type-driven detection that auto-discovers server/client pairs across a monorepo. Svelte / Vue / tsgo friendly.",
   "keywords": [
     "hono",
@@ -40,7 +40,11 @@
   "bin": {
     "hono-shaking": "./dist/cli.mjs"
   },
-  "files": ["dist", "LICENSE", "README.md"],
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
@@ -86,6 +90,9 @@
   },
   "packageManager": "pnpm@10.0.0",
   "pnpm": {
-    "onlyBuiltDependencies": ["@biomejs/biome", "esbuild"]
+    "onlyBuiltDependencies": [
+      "@biomejs/biome",
+      "esbuild"
+    ]
   }
 }
