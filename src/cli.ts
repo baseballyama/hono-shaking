@@ -2,6 +2,7 @@
 import { dirname, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
+import { bold, colorMethod, cyan, dim, gray, green, red, yellow } from "./colors.ts";
 import {
   buildIgnoreFilter,
   findConfigFile,
@@ -48,14 +49,20 @@ Optional:
   --config <path>            Explicit config file path. Default: search cwd
                              (then --root) for hono-shaking.config.{ts,...}.
   --no-config                Skip config file auto-discovery.
-  --fail-on-unused           Exit with code 1 if any unused routes are found.
-  --fail-on-orphans          Exit with code 1 if any orphan call sites exist.
+  --allow-unused             Exit 0 even when unused routes are found
+                             (default is exit 1).
+  --fail-on-orphans          Exit 1 if any orphan call sites exist.
   -h, --help                 Show this help
 
+Exit codes:
+  0  No unused routes (and no orphans if --fail-on-orphans is set).
+  1  Unused routes found, or orphans with --fail-on-orphans.
+  2  Invocation / configuration error.
+
 Framework support:
-  - .svelte files require "svelte" + "svelte2tsx" (optional peer deps).
-  - .vue files require "@vue/compiler-sfc" (optional peer dep).
-  Both are auto-detected; missing peer deps simply disable that framework.
+  - .svelte files require "svelte" + "svelte2tsx" (installed automatically
+    via optionalDependencies; npm/pnpm/yarn pull them in unless excluded).
+  - .vue files require "@vue/compiler-sfc" (same).
 
 About tsgo (typescript-go):
   This tool uses the standard "typescript" package Compiler API to read
@@ -65,7 +72,6 @@ About tsgo (typescript-go):
 `;
 
 const printHelp = (): void => {
-  // stdout so `hono-shaking --help | less` works as expected
   process.stdout.write(HELP_TEXT);
 };
 
@@ -73,7 +79,7 @@ interface CommonArgs {
   exclude: string[];
   json: boolean;
   showUsed: boolean;
-  failOnUnused: boolean;
+  allowUnused: boolean;
   failOnOrphans: boolean;
   configPath: string | null;
   noConfig: boolean;
@@ -113,7 +119,7 @@ const parseCli = (): Args => {
       "per-binding": { type: "boolean", default: false },
       config: { type: "string" },
       "no-config": { type: "boolean", default: false },
-      "fail-on-unused": { type: "boolean", default: false },
+      "allow-unused": { type: "boolean", default: false },
       "fail-on-orphans": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
@@ -129,7 +135,7 @@ const parseCli = (): Args => {
     exclude: values.exclude ?? [],
     json: values.json,
     showUsed: values["show-used"],
-    failOnUnused: values["fail-on-unused"],
+    allowUnused: values["allow-unused"],
     failOnOrphans: values["fail-on-orphans"],
     configPath: values.config ?? null,
     noConfig: values["no-config"],
@@ -143,8 +149,6 @@ const parseCli = (): Args => {
   ];
   const manualProvided = manualFlags.filter(([, v]) => v != null);
 
-  // Auto mode: explicit `--root`, or no manual flags at all (the default
-  // when the user just runs `hono-shaking` from the repo root).
   if (values.root != null || manualProvided.length === 0) {
     return {
       mode: "auto",
@@ -154,8 +158,6 @@ const parseCli = (): Args => {
     };
   }
 
-  // Manual mode: any manual flag opts in, but all four must be present so
-  // we don't silently fall back to auto when one is missing.
   const missing = manualFlags.filter(([, v]) => v == null).map(([k]) => `--${k}`);
   if (missing.length > 0) {
     process.stderr.write(
@@ -180,44 +182,17 @@ const parseCli = (): Args => {
 const cwd = process.cwd();
 const rel = (p: string): string => relative(cwd, p) || p;
 
-const printHuman = (result: DiffResult, showUsed: boolean, indent = ""): void => {
-  const { unused, used, orphanCalls } = result;
-  const totalDefined = unused.length + used.length;
-
-  process.stdout.write(`${indent}defined routes : ${totalDefined}\n`);
-  process.stdout.write(`${indent}used routes    : ${used.length}\n`);
-  process.stdout.write(`${indent}unused routes  : ${unused.length}\n`);
-  process.stdout.write(`${indent}orphan calls   : ${orphanCalls.length}\n\n`);
-
-  if (unused.length > 0) {
-    process.stdout.write(`${indent}Unused routes (${unused.length})\n`);
-    for (const r of unused) {
-      process.stdout.write(`${indent}  ${r.method.padEnd(7)} ${r.path}\n`);
-    }
-    process.stdout.write("\n");
-  }
-
-  if (orphanCalls.length > 0) {
-    process.stdout.write(
-      `${indent}Orphan call sites (called but no server definition) (${orphanCalls.length})\n`,
-    );
-    for (const c of orphanCalls) {
-      process.stdout.write(
-        `${indent}  ${c.method.padEnd(7)} ${c.path}  (${rel(c.file)}:${c.line})\n`,
-      );
-    }
-    process.stdout.write("\n");
-  }
-
-  if (showUsed && used.length > 0) {
-    process.stdout.write(`${indent}Used routes (${used.length})\n`);
-    for (const u of used) {
-      process.stdout.write(
-        `${indent}  ${u.route.method.padEnd(7)} ${u.route.path}  [${u.callSites.length}x]\n`,
-      );
-    }
-  }
+/** Human-friendly duration: 850ms, 1.2s, 14.0s … */
+const ms = (start: number): string => {
+  const elapsed = Date.now() - start;
+  if (elapsed < 1000) return `${elapsed}ms`;
+  return `${(elapsed / 1000).toFixed(1)}s`;
 };
+
+const tick = green("✓");
+const cross = red("✗");
+
+// ---- Output rendering ----
 
 interface FilteredDiff {
   diff: DiffResult;
@@ -225,7 +200,6 @@ interface FilteredDiff {
   ignoredOrphans: DiffResult["orphanCalls"];
 }
 
-/** Filter the diff against an ignore set and surface what was filtered. */
 const applyIgnoreFilter = (diff: DiffResult, filter: IgnoreFilter | null): FilteredDiff => {
   if (filter == null) {
     return { diff, ignoredUnused: [], ignoredOrphans: [] };
@@ -249,6 +223,183 @@ const applyIgnoreFilter = (diff: DiffResult, filter: IgnoreFilter | null): Filte
   };
 };
 
+interface ServerAggregate {
+  server: DiscoveryResult["servers"][number];
+  consumers: { binding: DiscoveryResult["bindings"][number]; usedCount: number }[];
+  diff: DiffResult;
+  ignoredUnused: DiffResult["unused"];
+  ignoredOrphans: DiffResult["orphanCalls"];
+}
+
+const formatServerLabel = (s: DiscoveryResult["servers"][number]): string =>
+  `${rel(s.packageDir)} :: ${s.exportName}`;
+
+const renderRouteList = (
+  title: string,
+  routes: { method: import("./types.ts").HttpMethod; path: string }[],
+): string => {
+  const lines: string[] = [];
+  lines.push(`  ${bold(title)} ${dim(`(${routes.length})`)}`);
+  for (const r of routes) {
+    lines.push(`    ${colorMethod(r.method)} ${r.path}`);
+  }
+  return lines.join("\n");
+};
+
+const renderOrphanList = (title: string, calls: DiffResult["orphanCalls"]): string => {
+  const lines: string[] = [];
+  lines.push(`  ${bold(title)} ${dim(`(${calls.length})`)}`);
+  for (const c of calls) {
+    lines.push(`    ${colorMethod(c.method)} ${c.path}  ${dim(`(${rel(c.file)}:${c.line})`)}`);
+  }
+  return lines.join("\n");
+};
+
+const renderSummaryTable = (aggs: ServerAggregate[]): string => {
+  const rows: {
+    status: string;
+    label: string;
+    def: number;
+    used: number;
+    un: number;
+    orphan: number;
+  }[] = [];
+  for (const a of aggs) {
+    const defined = a.diff.unused.length + a.diff.used.length;
+    rows.push({
+      status: a.diff.unused.length === 0 && a.diff.orphanCalls.length === 0 ? tick : cross,
+      label: formatServerLabel(a.server),
+      def: defined,
+      used: a.diff.used.length,
+      un: a.diff.unused.length,
+      orphan: a.diff.orphanCalls.length,
+    });
+  }
+  const labelWidth = Math.max(20, ...rows.map((r) => stripWidth(r.label)));
+  const header = `  ${" ".repeat(2)}  ${"server".padEnd(labelWidth)}   ${"defined".padStart(7)}  ${"used".padStart(5)}  ${"unused".padStart(6)}  ${"orphan".padStart(6)}`;
+  const sep = `  ${"─".repeat(labelWidth + 36)}`;
+  const padN = (n: number, w: number): string => String(n).padStart(w);
+  const lines = [bold(header), sep];
+  for (const r of rows) {
+    lines.push(
+      `  ${r.status}   ${r.label.padEnd(labelWidth)}   ${dim(padN(r.def, 7))}  ${cyan(padN(r.used, 5))}  ${r.un === 0 ? dim(padN(r.un, 6)) : red(padN(r.un, 6))}  ${r.orphan === 0 ? dim(padN(r.orphan, 6)) : yellow(padN(r.orphan, 6))}`,
+    );
+  }
+  return lines.join("\n");
+};
+
+// Width of a string with ANSI color codes stripped. The ESC byte is intentional;
+// we silence the regex-no-control-char rule for this one literal.
+// oxlint-disable-next-line no-control-regex
+const ANSI_PATTERN = /\[\d+m/g;
+const stripWidth = (s: string): number => s.replace(ANSI_PATTERN, "").length;
+
+const renderAutoReport = (
+  args: AutoArgs,
+  discovery: DiscoveryResult,
+  aggs: ServerAggregate[],
+  pairResults: {
+    server: DiscoveryResult["servers"][number];
+    binding: DiscoveryResult["bindings"][number];
+    diff: DiffResult;
+  }[],
+): string => {
+  const out: string[] = [];
+
+  // Bindings line (compact)
+  out.push("");
+  out.push(bold("Bindings"));
+  for (const b of discovery.bindings) {
+    out.push(
+      `  ${dim(rel(b.clientFile))} :: ${cyan(b.variableName)}  ${gray("→")}  ${rel(b.server.appTypeFile)} :: ${bold(b.server.exportName)}`,
+    );
+  }
+
+  // Summary table
+  out.push("");
+  out.push(bold("Summary"));
+  out.push(renderSummaryTable(aggs));
+
+  // Unused routes section (grouped)
+  const totalUnused = aggs.reduce((n, a) => n + a.diff.unused.length, 0);
+  if (totalUnused > 0) {
+    out.push("");
+    out.push(bold(`Unused routes (${totalUnused})`));
+    for (const a of aggs) {
+      if (a.diff.unused.length === 0) continue;
+      out.push("");
+      out.push(renderRouteList(formatServerLabel(a.server), a.diff.unused));
+    }
+  }
+
+  // Orphan calls section (grouped)
+  const totalOrphans = aggs.reduce((n, a) => n + a.diff.orphanCalls.length, 0);
+  if (totalOrphans > 0) {
+    out.push("");
+    out.push(bold(`Orphan call sites (${totalOrphans})`));
+    for (const a of aggs) {
+      if (a.diff.orphanCalls.length === 0) continue;
+      out.push("");
+      out.push(renderOrphanList(formatServerLabel(a.server), a.diff.orphanCalls));
+    }
+  }
+
+  // Used (optional verbose)
+  if (args.showUsed) {
+    out.push("");
+    out.push(bold("Used routes"));
+    for (const a of aggs) {
+      if (a.diff.used.length === 0) continue;
+      out.push("");
+      out.push(`  ${bold(formatServerLabel(a.server))} ${dim(`(${a.diff.used.length})`)}`);
+      for (const u of a.diff.used) {
+        out.push(
+          `    ${colorMethod(u.route.method)} ${u.route.path}  ${dim(`[${u.callSites.length}x]`)}`,
+        );
+      }
+    }
+  }
+
+  // Per-binding breakdown
+  if (args.perBinding) {
+    out.push("");
+    out.push(bold("Per-binding detail"));
+    for (const p of pairResults) {
+      out.push("");
+      out.push(
+        `  ${bold(formatServerLabel(p.server))}  ${gray("↔")}  ${rel(p.binding.clientPackageDir)} :: ${cyan(p.binding.variableName)}`,
+      );
+      out.push(
+        `  ${dim(`defined ${p.diff.unused.length + p.diff.used.length}  used ${p.diff.used.length}  unused ${p.diff.unused.length}  orphan ${p.diff.orphanCalls.length}`)}`,
+      );
+    }
+  }
+
+  // Ignored summary
+  const totalIgnoredUnused = aggs.reduce((n, a) => n + a.ignoredUnused.length, 0);
+  const totalIgnoredOrphans = aggs.reduce((n, a) => n + a.ignoredOrphans.length, 0);
+  if (totalIgnoredUnused + totalIgnoredOrphans > 0) {
+    out.push("");
+    out.push(
+      dim(`(${totalIgnoredUnused} unused / ${totalIgnoredOrphans} orphan ignored by config)`),
+    );
+  }
+
+  // Final status line
+  out.push("");
+  if (totalUnused === 0) {
+    out.push(`${tick} ${bold("All defined routes are used.")}`);
+  } else {
+    out.push(
+      `${cross} ${bold(`${totalUnused} unused route${totalUnused === 1 ? "" : "s"} found`)} across ${aggs.filter((a) => a.diff.unused.length > 0).length} server${aggs.filter((a) => a.diff.unused.length > 0).length === 1 ? "" : "s"}.`,
+    );
+  }
+  out.push("");
+  return out.join("\n");
+};
+
+// ---- Pipeline ----
+
 const resolveConfig = async (
   args: Args,
 ): Promise<{ config: HonoUnusedConfig | null; configPath: string | null }> => {
@@ -266,17 +417,20 @@ const resolveConfig = async (
 };
 
 const runManual = async (args: ManualArgs, filter: IgnoreFilter | null): Promise<number> => {
-  const showSpinner = !args.json;
-  const spinner = showSpinner ? startSpinner("Extracting server routes…") : null;
+  const spinner = args.json ? null : startSpinner("Extracting server routes (may take a moment)…");
 
+  const tExtract = Date.now();
   const defined = extractRoutes({
     tsconfigPath: args.serverTsconfig,
     appTypeFile: args.appTypeFile,
     exportName: args.appTypeExport,
   });
+  spinner?.log(
+    `${tick} Extracted ${cyan(String(defined.length))} routes from ${bold(rel(args.appTypeFile))} ${dim(`(${ms(tExtract)})`)}`,
+  );
 
-  spinner?.update(`Scanning ${rel(args.clientDir)} for hc calls…`);
-
+  spinner?.update(`Scanning ${rel(args.clientDir)} (may take a moment)…`);
+  const tScan = Date.now();
   const called = await findCallsites({
     tsconfigPath: args.clientTsconfig,
     includeDir: args.clientDir,
@@ -285,65 +439,77 @@ const runManual = async (args: ManualArgs, filter: IgnoreFilter | null): Promise
     restrictToClientNames: null,
     adapters: null,
   });
+  spinner?.log(
+    `${tick} Scanned ${cyan(rel(args.clientDir))}, found ${cyan(String(called.length))} hc call site${called.length === 1 ? "" : "s"} ${dim(`(${ms(tScan)})`)}`,
+  );
 
   const raw = diffRoutes(defined, called);
   const { diff: result, ignoredUnused, ignoredOrphans } = applyIgnoreFilter(raw, filter);
-  spinner?.stop();
+  await spinner?.stop();
 
   if (args.json) {
     process.stdout.write(
       `${JSON.stringify({ ...result, ignored: { unused: ignoredUnused, orphans: ignoredOrphans } }, null, 2)}\n`,
     );
   } else {
-    process.stdout.write("# Summary\n");
-    printHuman(result, args.showUsed, "  ");
+    const total = result.unused.length;
+    process.stdout.write("\n");
+    process.stdout.write(`${bold("Summary")}\n`);
+    process.stdout.write(
+      `  defined ${dim(String(defined.length))}  used ${cyan(String(result.used.length))}  unused ${total === 0 ? dim("0") : red(String(total))}  orphan ${result.orphanCalls.length === 0 ? dim("0") : yellow(String(result.orphanCalls.length))}\n`,
+    );
+    if (result.unused.length > 0) {
+      process.stdout.write("\n");
+      process.stdout.write(`${renderRouteList("Unused routes", result.unused)}\n`);
+    }
+    if (result.orphanCalls.length > 0) {
+      process.stdout.write("\n");
+      process.stdout.write(`${renderOrphanList("Orphan calls", result.orphanCalls)}\n`);
+    }
     if (ignoredUnused.length + ignoredOrphans.length > 0) {
       process.stdout.write(
-        `  ignored        : ${ignoredUnused.length} unused / ${ignoredOrphans.length} orphan (config)\n`,
+        `\n${dim(`(${ignoredUnused.length} unused / ${ignoredOrphans.length} orphan ignored by config)`)}\n`,
+      );
+    }
+    process.stdout.write("\n");
+    if (total === 0) {
+      process.stdout.write(`${tick} ${bold("All defined routes are used.")}\n\n`);
+    } else {
+      process.stdout.write(
+        `${cross} ${bold(`${total} unused route${total === 1 ? "" : "s"} found.`)}\n\n`,
       );
     }
   }
 
-  if (args.failOnUnused && result.unused.length > 0) return 1;
+  if (!args.allowUnused && result.unused.length > 0) return 1;
   if (args.failOnOrphans && result.orphanCalls.length > 0) return 1;
   return 0;
 };
 
-interface PairResult {
-  server: DiscoveryResult["servers"][number];
-  binding: DiscoveryResult["bindings"][number];
-  diff: DiffResult;
-}
-
 const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<number> => {
-  // Spinner only when stdout/stderr is a TTY and we're not emitting JSON
-  // (JSON consumers redirect stderr too in practice).
-  const showSpinner = !args.json;
-  const spinner = showSpinner ? startSpinner("Discovering server / client pairs…") : null;
+  const spinner = args.json ? null : startSpinner("Discovering server / client pairs…");
 
+  const tDiscover = Date.now();
   const discovery = discoverProject(args.root);
-  spinner?.update(
-    `Discovered ${discovery.servers.length} server${discovery.servers.length === 1 ? "" : "s"} / ${discovery.bindings.length} binding${discovery.bindings.length === 1 ? "" : "s"} — extracting routes…`,
+  spinner?.log(
+    `${tick} Discovered ${cyan(String(discovery.servers.length))} server${discovery.servers.length === 1 ? "" : "s"} / ${cyan(String(discovery.bindings.length))} binding${discovery.bindings.length === 1 ? "" : "s"} ${dim(`(${ms(tDiscover)})`)}`,
   );
 
   if (discovery.servers.length === 0) {
-    spinner?.stop();
+    await spinner?.stop();
     process.stderr.write(
-      `error: no Hono server (export type X = typeof Y) found under ${args.root}\n`,
+      `${cross} ${bold("No Hono server found")} (looked for "export type X = typeof Y" under ${args.root}).\n`,
     );
     return 2;
   }
   if (discovery.bindings.length === 0) {
-    spinner?.stop();
+    await spinner?.stop();
     process.stderr.write(
-      `error: no hc<...> client binding resolved to any discovered server under ${args.root}\n`,
+      `${cross} ${bold("No hc<...> client binding")} resolved to any discovered server under ${args.root}.\n`,
     );
     return 2;
   }
 
-  // Group bindings by (tsconfig, scan dir) so we run findCallsites only once
-  // per client package. Multiple bindings sharing a client package are split
-  // back out by matchedClientName afterwards.
   interface Bucket {
     clientTsconfigPath: string;
     clientPackageDir: string;
@@ -364,16 +530,17 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
     bucket.bindings.push(b);
   }
 
-  // Extract each server's routes once; multiple bindings may share a server.
   const routesByServerKey = new Map<string, ReturnType<typeof extractRoutes>>();
   const serverKey = (s: DiscoveryResult["servers"][number]): string =>
     `${s.appTypeFile} ${s.exportName}`;
+
   let serverIdx = 0;
   for (const s of discovery.servers) {
     serverIdx++;
     spinner?.update(
-      `Extracting routes (${serverIdx}/${discovery.servers.length}): ${rel(s.appTypeFile)} :: ${s.exportName}`,
+      `Extracting routes (${serverIdx}/${discovery.servers.length}): ${formatServerLabel(s)} (may take a moment)…`,
     );
+    const t = Date.now();
     const k = serverKey(s);
     if (!routesByServerKey.has(k)) {
       routesByServerKey.set(
@@ -385,16 +552,26 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
         }),
       );
     }
+    const routes = routesByServerKey.get(k)!;
+    spinner?.log(
+      `${tick} Extracted ${cyan(String(routes.length))} routes from ${bold(formatServerLabel(s))} ${dim(`(${ms(t)})`)}`,
+    );
   }
 
+  interface PairResult {
+    server: DiscoveryResult["servers"][number];
+    binding: DiscoveryResult["bindings"][number];
+    diff: DiffResult;
+  }
   const pairResults: PairResult[] = [];
-  const buckets_arr = [...buckets.values()];
+  const bucketArr = [...buckets.values()];
   let bucketIdx = 0;
-  for (const bucket of buckets_arr) {
+  for (const bucket of bucketArr) {
     bucketIdx++;
     spinner?.update(
-      `Scanning client (${bucketIdx}/${buckets_arr.length}): ${rel(bucket.clientPackageDir)}`,
+      `Scanning client (${bucketIdx}/${bucketArr.length}): ${rel(bucket.clientPackageDir)} (may take a moment)…`,
     );
+    const t = Date.now();
     const variableNames = [...new Set(bucket.bindings.map((b) => b.variableName))];
     const calls = await findCallsites({
       tsconfigPath: bucket.clientTsconfigPath,
@@ -413,19 +590,12 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
         diff: diffRoutes(defined, myCalls),
       });
     }
+    spinner?.log(
+      `${tick} Scanned ${bold(rel(bucket.clientPackageDir))}, ${cyan(String(calls.length))} call${calls.length === 1 ? "" : "s"} ${dim(`(${ms(t)})`)}`,
+    );
   }
 
-  spinner?.stop();
-
-  // Aggregate per server: a route is "unused" only if no consumer of that
-  // server hit it. The per-binding view (--per-binding) is shown separately.
-  interface ServerAggregate {
-    server: DiscoveryResult["servers"][number];
-    consumers: { binding: DiscoveryResult["bindings"][number]; usedCount: number }[];
-    diff: DiffResult;
-    ignoredUnused: DiffResult["unused"];
-    ignoredOrphans: DiffResult["orphanCalls"];
-  }
+  // Aggregate per server
   const aggByServer = new Map<string, ServerAggregate>();
   for (const p of pairResults) {
     const k = serverKey(p.server);
@@ -447,7 +617,6 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
     const allCalls = pairResults
       .filter((p) => serverKey(p.server) === k)
       .flatMap((p) => [...p.diff.used.flatMap((u) => u.callSites), ...p.diff.orphanCalls]);
-
     const raw = diffRoutes(defined, allCalls);
     const filtered = applyIgnoreFilter(raw, filter);
     agg.diff = filtered.diff;
@@ -455,12 +624,35 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
     agg.ignoredOrphans = filtered.ignoredOrphans;
   }
 
+  await spinner?.stop();
+
+  // Also append servers with no consumer (untouched) so they appear in the table.
+  const aggs: ServerAggregate[] = [];
+  for (const s of discovery.servers) {
+    const k = serverKey(s);
+    const existing = aggByServer.get(k);
+    if (existing != null) {
+      aggs.push(existing);
+    } else {
+      const defined = routesByServerKey.get(k) ?? [];
+      const raw = diffRoutes(defined, []);
+      const filtered = applyIgnoreFilter(raw, filter);
+      aggs.push({
+        server: s,
+        consumers: [],
+        diff: filtered.diff,
+        ignoredUnused: filtered.ignoredUnused,
+        ignoredOrphans: filtered.ignoredOrphans,
+      });
+    }
+  }
+
   if (args.json) {
     process.stdout.write(
       `${JSON.stringify(
         {
           servers: discovery.servers,
-          aggregates: [...aggByServer.values()],
+          aggregates: aggs,
           pairs: args.perBinding
             ? pairResults.map((p) => ({ server: p.server, binding: p.binding, diff: p.diff }))
             : undefined,
@@ -470,48 +662,13 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
       )}\n`,
     );
   } else {
-    process.stdout.write("# Discovered servers\n");
-    for (const s of discovery.servers) {
-      process.stdout.write(`  ${rel(s.appTypeFile)} :: ${s.exportName} (${s.routeCount} routes)\n`);
-    }
-    process.stdout.write("\n# Discovered bindings\n");
-    for (const b of discovery.bindings) {
-      process.stdout.write(
-        `  ${rel(b.clientFile)} :: ${b.variableName}  →  ${rel(b.server.appTypeFile)} :: ${b.server.exportName}\n`,
-      );
-    }
-    process.stdout.write("\n");
-
-    for (const agg of aggByServer.values()) {
-      const consumerList = agg.consumers
-        .map((c) => `${rel(c.binding.clientPackageDir)}::${c.binding.variableName}(${c.usedCount})`)
-        .join(", ");
-
-      process.stdout.write(`== ${rel(agg.server.packageDir)} :: ${agg.server.exportName} ==\n`);
-      process.stdout.write(`  consumers: ${consumerList}\n`);
-      printHuman(agg.diff, args.showUsed, "  ");
-      if (agg.ignoredUnused.length + agg.ignoredOrphans.length > 0) {
-        process.stdout.write(
-          `  ignored        : ${agg.ignoredUnused.length} unused / ${agg.ignoredOrphans.length} orphan (config)\n`,
-        );
-      }
-    }
-
-    if (args.perBinding) {
-      process.stdout.write("# Per-binding detail\n");
-      for (const p of pairResults) {
-        process.stdout.write(
-          `-- ${rel(p.server.packageDir)} :: ${p.server.exportName}  ↔  ${rel(p.binding.clientPackageDir)} :: ${p.binding.variableName} --\n`,
-        );
-        printHuman(p.diff, args.showUsed, "    ");
-      }
-    }
+    process.stdout.write(renderAutoReport(args, discovery, aggs, pairResults));
   }
 
   let code = 0;
-  const anyUnused = [...aggByServer.values()].some((a) => a.diff.unused.length > 0);
-  const anyOrphan = [...aggByServer.values()].some((a) => a.diff.orphanCalls.length > 0);
-  if (args.failOnUnused && anyUnused) code = 1;
+  const anyUnused = aggs.some((a) => a.diff.unused.length > 0);
+  const anyOrphan = aggs.some((a) => a.diff.orphanCalls.length > 0);
+  if (!args.allowUnused && anyUnused) code = 1;
   if (args.failOnOrphans && anyOrphan) code = 1;
   return code;
 };
@@ -522,9 +679,9 @@ const main = async (): Promise<void> => {
   if (!args.json) {
     const adapters = await listAdapters();
     if (adapters.length > 0) {
-      process.stderr.write(`# adapters loaded: ${adapters.join(", ")}\n`);
+      process.stderr.write(`${dim(`# adapters loaded: ${adapters.join(", ")}`)}\n`);
     } else {
-      process.stderr.write("# adapters loaded: (none — only .ts files were scanned)\n");
+      process.stderr.write(dim("# adapters loaded: (none — only .ts files were scanned)\n"));
     }
   }
 
@@ -532,7 +689,7 @@ const main = async (): Promise<void> => {
   const filter =
     config == null || configPath == null ? null : buildIgnoreFilter(config, dirname(configPath));
   if (!args.json && configPath != null) {
-    process.stderr.write(`# config: ${rel(configPath)}\n`);
+    process.stderr.write(`${dim(`# config: ${rel(configPath)}`)}\n`);
   }
 
   const code = args.mode === "auto" ? await runAuto(args, filter) : await runManual(args, filter);
@@ -540,6 +697,6 @@ const main = async (): Promise<void> => {
 };
 
 main().catch((err: unknown) => {
-  process.stderr.write(`${String(err)}\n`);
+  process.stderr.write(`${red("error:")} ${String(err)}\n`);
   process.exit(1);
 });
