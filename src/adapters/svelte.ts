@@ -1,6 +1,7 @@
 import { type SourceMapInput, TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 
 import type { FrameworkAdapter, TransformedScript } from "./adapter.ts";
+import { importPeer } from "./peer-resolver.ts";
 
 type Svelte2tsxFn = (source: string, options: object) => { code: string; map: object };
 
@@ -31,7 +32,7 @@ const pickFunction = (mod: unknown, key: string): unknown => {
 export const createSvelteAdapter = async (): Promise<FrameworkAdapter | null> => {
   let svelte2tsx: Svelte2tsxFn;
   try {
-    const mod = await import("svelte2tsx");
+    const mod = await importPeer("svelte2tsx");
     const fn = pickFunction(mod, "svelte2tsx");
     if (typeof fn !== "function") return null;
     svelte2tsx = fn as Svelte2tsxFn;

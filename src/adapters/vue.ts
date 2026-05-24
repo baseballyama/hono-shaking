@@ -1,4 +1,5 @@
 import type { FrameworkAdapter, TransformedScript } from "./adapter.ts";
+import { importPeer } from "./peer-resolver.ts";
 
 interface ScriptBlock {
   content: string;
@@ -22,7 +23,7 @@ type VueParseFn = (source: string, options: { filename: string }) => { descripto
 export const createVueAdapter = async (): Promise<FrameworkAdapter | null> => {
   let parse: VueParseFn;
   try {
-    const mod = await import("@vue/compiler-sfc");
+    const mod = await importPeer("@vue/compiler-sfc");
     if (mod == null || typeof mod !== "object") return null;
     const fn = (mod as Record<string, unknown>).parse;
     if (typeof fn !== "function") return null;
