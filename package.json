@@ -1,0 +1,89 @@
+{
+  "name": "hono-shaking",
+  "version": "0.0.0",
+  "description": "Find unused Hono RPC endpoints. Type-driven detection that auto-discovers server/client pairs across a monorepo. Svelte / Vue / tsgo friendly.",
+  "keywords": [
+    "hono",
+    "hono-rpc",
+    "hc",
+    "unused-code",
+    "dead-code",
+    "tree-shaking",
+    "static-analysis",
+    "typescript",
+    "monorepo",
+    "cli",
+    "svelte",
+    "vue"
+  ],
+  "homepage": "https://github.com/baseballyama/hono-shaking",
+  "bugs": "https://github.com/baseballyama/hono-shaking/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baseballyama/hono-shaking.git"
+  },
+  "license": "MIT",
+  "author": "Yuichiro Yamashita",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "hono-shaking": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint .",
+    "format:check": "biome format .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "release": "pnpm build && changeset publish",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "@jridgewell/trace-mapping": "^0.3.30",
+    "jiti": "^2.4.0",
+    "typescript": "^5.6.0"
+  },
+  "peerDependencies": {
+    "@vue/compiler-sfc": "^3.4.0",
+    "svelte": "^4.0.0 || ^5.0.0",
+    "svelte2tsx": "^0.7.0"
+  },
+  "peerDependenciesMeta": {
+    "svelte": { "optional": true },
+    "svelte2tsx": { "optional": true },
+    "@vue/compiler-sfc": { "optional": true }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@changesets/cli": "^2.27.0",
+    "@types/node": "^22.0.0",
+    "@vue/compiler-sfc": "^3.4.0",
+    "hono": "^4.6.0",
+    "svelte": "^5.0.0",
+    "svelte2tsx": "^0.7.0",
+    "tsup": "^8.3.0",
+    "vitest": "^2.1.0"
+  },
+  "packageManager": "pnpm@10.0.0",
+  "pnpm": {
+    "onlyBuiltDependencies": ["@biomejs/biome", "esbuild"]
+  }
+}

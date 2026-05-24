@@ -1,0 +1,13 @@
+node_modules
+dist
+coverage
+.DS_Store
+*.log
+
+# Build artefacts in fixtures
+tests/fixtures/**/dist
+
+# Editor / IDE
+.vscode/*
+!.vscode/extensions.json
+.idea
