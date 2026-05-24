@@ -1,38 +1,57 @@
-// Line-based progress reporter with periodic heartbeats from a worker thread.
+// Progress reporter.
 //
-// The main-thread work (TypeScript Compiler API, fs walks) is synchronous and
-// can hold the event loop for many seconds. A pure main-thread spinner cannot
-// animate during that window, so we run the heartbeat in a worker thread.
+// Output style:
 //
-// The worker writes via `fs.writeSync(2, ...)` directly to fd 2. `process
-// .stderr.write` from a worker routes through a parent-side stream that
-// doesn't drain while the main thread is blocked in synchronous work, which
-// was the root cause of every earlier "the spinner just freezes" bug.
+//   ⏳ Discovering server / client pairs…
 //
-// Output style depends on whether fd 2 is a TTY:
+// While the step runs the line is rewritten on every tick — the cursor jumps
+// up and erases the previous frame, then a new one is written:
 //
-//   * TTY: in-place spinner with carriage return + erase-line. Animates
-//     smoothly because each tick redraws the same row.
-//   * Non-TTY (CI logs, file redirection, line-buffered runners): one new
-//     `… working Xs` line every two seconds. Each line is newline-terminated
-//     so it lands on the screen immediately.
+//   ⠼ Discovering server / client pairs… (7.3s)
 //
-// `done()` clears the spinner line in TTY mode before printing the `✓`
-// result so the spinner doesn't leak into the final report.
+// On completion the line is rewritten one last time as:
+//
+//   ✓ Discovered 5 servers / 10 bindings (17.7s)
+//
+// Net result: each step occupies a single visible row that transitions
+// ⏳ → spinner+elapsed → ✓. The user sees one line per finished step,
+// not a scrolling wall of heartbeats.
+//
+// Implementation notes:
+//
+//   * The rewrite uses `\x1b[1A\x1b[2K` (cursor up + erase line) followed by
+//     the new frame and a newline. Each frame is newline-terminated, so it
+//     flushes through line-buffered runners like `pnpm dlx`. Any terminal
+//     that interprets ANSI escapes will overwrite the previous row in
+//     place.
+//   * `process.env.CI != null` (and the `dumb` TERM) opt out of the
+//     overwrite trick — CI loggers tend to strip ANSI escapes and the
+//     literal bytes would clutter the log. In that mode we just print
+//     ⏳ start and ✓ end, no heartbeat.
+//   * The heartbeat runs in a worker thread because the main-thread
+//     work (TypeScript Compiler API, fs walks) is synchronous and would
+//     starve a main-thread timer.
+//   * The worker writes via `fs.writeSync(2, ...)` directly to fd 2.
+//     `process.stderr.write` from a worker is routed through a
+//     parent-side stream that doesn't drain while the main thread is
+//     blocked, which used to make every previous spinner go silent.
 
 import { writeSync } from "node:fs";
-import { isatty } from "node:tty";
 import { Worker } from "node:worker_threads";
 
 import { dim, green } from "./colors.ts";
 
-const HEARTBEAT_TTY_INTERVAL_MS = 80;
-const HEARTBEAT_TTY_FIRST_DELAY_MS = 80;
-const HEARTBEAT_PIPE_INTERVAL_MS = 2000;
-const HEARTBEAT_PIPE_FIRST_DELAY_MS = 1500;
+const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const TICK_INTERVAL_MS = 100;
+const FIRST_TICK_DELAY_MS = 100;
 
-const STDERR_IS_TTY = isatty(2);
-const CLEAR_LINE = "\r\x1b[K";
+const CURSOR_UP_AND_ERASE = "\x1b[1A\x1b[2K";
+
+// `pnpm dlx` and a real interactive terminal both render ANSI fine, so we
+// default to fancy overwrite. CI loggers often strip ANSI, which would leave
+// raw escape bytes in their output — opt out via the conventional `CI` env.
+const useFancyOverwrite =
+  process.env.CI == null && process.env.TERM !== "dumb" && process.env.NO_COLOR == null;
 
 const writeStderr = (s: string): void => {
   writeSync(2, s);
@@ -51,24 +70,22 @@ const fs = require("node:fs");
 const { workerData } = require("node:worker_threads");
 const stopFlag = new Int32Array(workerData.buffer);
 const startedAt = Date.now();
-const isTty = workerData.isTty;
+const label = workerData.label;
+const frames = workerData.frames;
 const intervalMs = workerData.intervalMs;
 const firstDelayMs = workerData.firstDelayMs;
-const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const CLEAR_LINE = "\\r\\x1b[K";
+const CURSOR_UP_AND_ERASE = ${JSON.stringify(CURSOR_UP_AND_ERASE)};
 let frame = 0;
 
 const tick = () => {
   if (Atomics.load(stopFlag, 0) !== 0) return;
+  // Bump the tick counter so the parent knows the spinner has taken over
+  // the previous row and needs to erase it before printing the ✓ summary.
+  Atomics.add(stopFlag, 1, 1);
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
-  if (isTty) {
-    // Carriage-return + erase-line + spinner; no trailing newline so the
-    // next tick rewrites the same row.
-    fs.writeSync(2, CLEAR_LINE + " " + FRAMES[frame % FRAMES.length] + " working " + elapsed + "s");
-    frame++;
-  } else {
-    fs.writeSync(2, "   … working " + elapsed + "s\\n");
-  }
+  const sp = frames[frame % frames.length];
+  fs.writeSync(2, CURSOR_UP_AND_ERASE + " " + sp + " " + label + " (" + elapsed + "s)\\n");
+  frame++;
 };
 
 setTimeout(() => {
@@ -79,20 +96,23 @@ setTimeout(() => {
 `;
 
 interface Heartbeat {
-  stop: () => void;
+  /** Stop the heartbeat. Returns the number of frames the worker emitted. */
+  stop: () => number;
 }
 
-const startHeartbeat = (): Heartbeat | null => {
+const startHeartbeat = (label: string): Heartbeat | null => {
   try {
-    const buffer = new SharedArrayBuffer(4);
+    // Two Int32 slots: [0] is the stop flag, [1] is the tick counter.
+    const buffer = new SharedArrayBuffer(8);
     const flag = new Int32Array(buffer);
     const worker = new Worker(HEARTBEAT_WORKER_SOURCE, {
       eval: true,
       workerData: {
         buffer,
-        isTty: STDERR_IS_TTY,
-        intervalMs: STDERR_IS_TTY ? HEARTBEAT_TTY_INTERVAL_MS : HEARTBEAT_PIPE_INTERVAL_MS,
-        firstDelayMs: STDERR_IS_TTY ? HEARTBEAT_TTY_FIRST_DELAY_MS : HEARTBEAT_PIPE_FIRST_DELAY_MS,
+        label,
+        frames: FRAMES,
+        intervalMs: TICK_INTERVAL_MS,
+        firstDelayMs: FIRST_TICK_DELAY_MS,
       },
     });
     worker.unref();
@@ -100,6 +120,7 @@ const startHeartbeat = (): Heartbeat | null => {
       stop: () => {
         Atomics.store(flag, 0, 1);
         void worker.terminate();
+        return Atomics.load(flag, 1);
       },
     };
   } catch {
@@ -108,22 +129,22 @@ const startHeartbeat = (): Heartbeat | null => {
 };
 
 export interface StepHandle {
-  /** Mark this step done, printing `✓ <message> (elapsed)`. */
+  /** Mark this step done, rewriting the step's row as `✓ message (elapsed)`. */
   done: (message: string) => void;
 }
 
 export const startStep = (label: string): StepHandle => {
   writeStderr(`⏳ ${label}\n`);
   const t = Date.now();
-  const heartbeat = startHeartbeat();
+  const heartbeat = useFancyOverwrite ? startHeartbeat(label) : null;
   return {
     done: (message) => {
       heartbeat?.stop();
-      // In TTY mode we own the current line with the spinner; erase it so the
-      // ✓ summary lands cleanly. In non-TTY mode the heartbeats are real
-      // separate lines and we just append.
-      if (STDERR_IS_TTY) {
-        writeStderr(CLEAR_LINE);
+      if (useFancyOverwrite) {
+        // Whether or not the worker actually ticked, the previous line is
+        // exactly one row above the cursor (the ⏳ initial line or the
+        // most recent spinner frame). Erase it so ✓ replaces it cleanly.
+        writeStderr(CURSOR_UP_AND_ERASE);
       }
       writeStderr(`${tickIcon} ${message} ${dim(`(${fmtElapsed(t)})`)}\n`);
     },
