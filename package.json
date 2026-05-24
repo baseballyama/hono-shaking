@@ -1,6 +1,6 @@
 {
   "name": "hono-shaking",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Find unused Hono RPC endpoints. Type-driven detection that auto-discovers server/client pairs across a monorepo. Svelte / Vue / tsgo friendly.",
   "keywords": [
     "cli",
