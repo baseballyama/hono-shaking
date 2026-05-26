@@ -226,7 +226,7 @@ in between — the same config is used.
 ### Schema
 
 ```ts
-interface HonoUnusedConfig {
+interface HonoShakingUserConfig {
   ignore: {
     routes: IgnoreRoutePattern[] | null;
     orphans: IgnoreOrphanPattern[] | null;
@@ -255,10 +255,33 @@ interface IgnoreOrphanPattern {
 
 ### CLI overrides
 
-| Flag              | Purpose                     |
-| ----------------- | --------------------------- |
-| `--config <path>` | Explicit config file path.  |
-| `--no-config`     | Skip config auto-discovery. |
+| Flag                    | Purpose                                                           |
+| ----------------------- | ----------------------------------------------------------------- |
+| `--config <path>`       | Explicit config file path.                                        |
+| `--no-config`           | Skip config auto-discovery.                                       |
+| `--fail-on-dead-config` | Exit `1` if any ignore rule never matched (good for CI).          |
+| `--no-warn-dead-config` | Silence the default-on warning that lists unmatched ignore rules. |
+
+### Dead-config detection
+
+Routes get renamed and removed. Without a check, the corresponding entries
+in `ignore.routes` / `ignore.orphans` quietly outlive the code they refer
+to — adding visual noise to the config and, worse, masking a future
+unused-route that happens to match the stale rule.
+
+By default `hono-shaking` warns (on stderr) when any ignore rule never
+matched anything during the run:
+
+```
+warning: 2 ignore rules in hono-shaking.config.ts never matched:
+  ignore.routes[1]   method="DELETE" path="/api/v1/this-was-removed"  (Removed last quarter)
+  ignore.orphans[0]  method="GET" path="/never-called"
+  Rules may be unmatched because the route was renamed/removed, or
+  because an earlier rule shadowed them.
+```
+
+Pass `--fail-on-dead-config` in CI to turn this into a hard error so the
+config can't rot. Pass `--no-warn-dead-config` to suppress the warning.
 
 ## How it works
 

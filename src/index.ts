@@ -10,6 +10,7 @@ export {
   type IgnoreOrphanPattern,
   type IgnoreRoutePattern,
   loadConfig,
+  type UnmatchedConfigRule,
 } from "./config.ts";
 export { diffRoutes } from "./diff.ts";
 export {

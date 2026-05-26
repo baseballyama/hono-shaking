@@ -210,9 +210,33 @@ const matchesFile = (target: string, fileGlob: string | null, configDir: string)
   return globToRegex(resolveConfigGlob(fileGlob, configDir)).test(target);
 };
 
+/**
+ * A rule from the user's config that never matched anything during a run.
+ * Usually this means the route was renamed / deleted, or the rule was a typo —
+ * either way the rule is dead weight and the user probably wants to remove it.
+ *
+ * Note: rules are matched in array order with short-circuit `.some()`
+ * semantics, so a rule is also reported as unmatched if an earlier rule
+ * shadowed it (e.g. a broader catch-all listed first). That's intentional —
+ * a fully-shadowed rule is also doing nothing.
+ */
+export interface UnmatchedConfigRule {
+  kind: "route" | "orphan";
+  /** Index of the rule in its original config array. */
+  index: number;
+  rule: IgnoreRoutePattern | IgnoreOrphanPattern;
+}
+
 export interface IgnoreFilter {
   isRouteIgnored: (route: DefinedRoute) => boolean;
   isOrphanIgnored: (call: CallSiteRef) => boolean;
+  /**
+   * Returns rules from the config that never matched anything routed through
+   * this filter. Call after all routes / orphans have been processed (i.e. at
+   * the end of the run); the result is a snapshot of the filter's hit counters
+   * at that moment.
+   */
+  getUnmatchedRules: () => UnmatchedConfigRule[];
 }
 
 export const buildIgnoreFilter = (
@@ -221,21 +245,47 @@ export const buildIgnoreFilter = (
 ): IgnoreFilter => {
   const routes = config.ignore?.routes ?? [];
   const orphans = config.ignore?.orphans ?? [];
+  const routeHits: number[] = Array.from({ length: routes.length }, () => 0);
+  const orphanHits: number[] = Array.from({ length: orphans.length }, () => 0);
 
   return {
-    isRouteIgnored: (route) =>
-      routes.some(
-        (r) =>
+    isRouteIgnored: (route) => {
+      for (let i = 0; i < routes.length; i++) {
+        const r = routes[i]!;
+        if (
           matchesMethod(route.method, r.method) &&
           matchesAnyPath(route.path, asArray(r.path)) &&
-          matchesServer(route, r.serverAppTypeFile, configDir),
-      ),
-    isOrphanIgnored: (call) =>
-      orphans.some(
-        (o) =>
+          matchesServer(route, r.serverAppTypeFile, configDir)
+        ) {
+          routeHits[i]!++;
+          return true;
+        }
+      }
+      return false;
+    },
+    isOrphanIgnored: (call) => {
+      for (let i = 0; i < orphans.length; i++) {
+        const o = orphans[i]!;
+        if (
           matchesMethod(call.method, o.method) &&
           (o.path == null || matchesAnyPath(call.path, asArray(o.path))) &&
-          matchesFile(call.file, o.file, configDir),
-      ),
+          matchesFile(call.file, o.file, configDir)
+        ) {
+          orphanHits[i]!++;
+          return true;
+        }
+      }
+      return false;
+    },
+    getUnmatchedRules: () => {
+      const out: UnmatchedConfigRule[] = [];
+      for (let i = 0; i < routes.length; i++) {
+        if (routeHits[i] === 0) out.push({ kind: "route", index: i, rule: routes[i]! });
+      }
+      for (let i = 0; i < orphans.length; i++) {
+        if (orphanHits[i] === 0) out.push({ kind: "orphan", index: i, rule: orphans[i]! });
+      }
+      return out;
+    },
   };
 };
