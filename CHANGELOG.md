@@ -1,5 +1,48 @@
 # hono-shaking
 
+## 0.4.0
+
+### Minor Changes
+
+- ada180b: feat: warn on dead config entries; add `--fail-on-dead-config`
+
+  Ignore rules in `hono-shaking.config.ts` (`ignore.routes[]`,
+  `ignore.orphans[]`) that never match anything during a run are now
+  reported as warnings on stderr by default, so stale entries don't quietly
+  outlive the routes they were written for. A rule is also reported as
+  unmatched when an earlier broader rule fully shadows it — both forms are
+  effectively dead config the user probably wants to clean up.
+
+  Two new CLI flags:
+
+  - `--fail-on-dead-config` — exit `1` if any ignore rule was unmatched.
+    Useful in CI to keep the config from rotting as routes are renamed
+    or removed.
+  - `--no-warn-dead-config` — silence the warning (default is to print).
+
+  The library API gains `IgnoreFilter.getUnmatchedRules()` and an
+  `UnmatchedConfigRule` type for callers that want to render their own
+  report.
+
+- 0c1f311: feat: monorepo-friendly config discovery and naming
+
+  `hono-shaking.config.{ts,mts,mjs,js,cjs}` is now discovered by walking up
+  the filesystem from the directory you run the CLI in. A single config at
+  the repo root applies whether you run from the root, from `apps/api`, or
+  from any other sub-package — no need to pass `--config` or `--root`
+  explicitly.
+
+  Path-shaped fields in the config (`serverAppTypeFile` on route ignores,
+  `file` on orphan ignores) without a leading `/` or `*` are now resolved
+  relative to the config file's directory. This was already the case for
+  `serverAppTypeFile`; the `file` glob is now consistent with it. Globs
+  that already started with `**/` or `/` keep their previous meaning.
+
+  The exported config type has been renamed to `HonoShakingUserConfig` to
+  match the Vite-style convention (`ViteUserConfig`). The old name
+  `HonoUnusedConfig` is kept as a deprecated alias for backwards
+  compatibility.
+
 ## 0.3.3
 
 ### Patch Changes
