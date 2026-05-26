@@ -4,6 +4,7 @@ export {
   buildIgnoreFilter,
   defineConfig,
   findConfigFile,
+  type HonoShakingUserConfig,
   type HonoUnusedConfig,
   type IgnoreFilter,
   type IgnoreOrphanPattern,

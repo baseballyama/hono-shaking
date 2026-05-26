@@ -156,8 +156,11 @@ so JSON on stdout stays clean for pipelines.
 ## Configuration
 
 Drop a `hono-shaking.config.ts` (or `.mts` / `.mjs` / `.js` / `.cjs`) in the
-working directory. It's loaded by [`jiti`](https://github.com/unjs/jiti) —
-the same TS loader Nuxt and Vitest use — so transitive `.ts` imports work
+working directory — or, in a monorepo, in the repo root. The loader walks
+up the filesystem from the directory you run `hono-shaking` in, so a single
+config at the repo root applies whether you run from the root or from any
+sub-package. It's loaded by [`jiti`](https://github.com/unjs/jiti) — the
+same TS loader Nuxt and Vitest use — so transitive `.ts` imports work
 without a build step.
 
 ```ts
@@ -184,6 +187,41 @@ export default defineConfig({
   },
 });
 ```
+
+### Monorepo
+
+In a monorepo, place the config at the repo root. Path-shaped fields
+(`serverAppTypeFile` on route ignores, `file` on orphan ignores) without a
+leading `/` or `*` are interpreted **relative to the config file's
+directory** — so you can scope rules to a specific package without
+remembering `**/` prefixes:
+
+```ts
+// <repo-root>/hono-shaking.config.ts
+import { defineConfig } from "hono-shaking";
+
+export default defineConfig({
+  ignore: {
+    routes: [
+      // Only ignore on the `apps/api` server, not on any other server in
+      // the repo that happens to expose the same path.
+      {
+        method: "POST",
+        path: "/api/v1/webhooks/**",
+        serverAppTypeFile: "apps/api/src/index.ts",
+        reason: "External webhooks",
+      },
+    ],
+    orphans: [
+      // Scope an orphan-ignore to one package.
+      { method: "GET", path: "/token", file: "apps/web/src/lib/tiptap/Editor.svelte" },
+    ],
+  },
+});
+```
+
+Run `hono-shaking` from the repo root, from `apps/api`, or from anywhere
+in between — the same config is used.
 
 ### Schema
 

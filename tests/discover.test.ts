@@ -31,4 +31,23 @@ describe("discoverProject", () => {
     const names = bindings.map((b) => b.variableName).sort();
     expect(names).toContain("widgetClient");
   });
+
+  it("discovers server / client pairs across monorepo packages", () => {
+    const { servers, bindings } = discoverProject(fixture("monorepo"));
+
+    expect(servers).toHaveLength(1);
+    const apiServer = servers[0];
+    expect(apiServer?.exportName).toBe("AppType");
+    // Server is correctly attributed to the API package (not the repo root).
+    expect(apiServer?.packageDir.endsWith("apps/api")).toBe(true);
+
+    expect(bindings).toHaveLength(1);
+    const webBinding = bindings[0];
+    expect(webBinding?.variableName).toBe("backendClient");
+    // Binding is attributed to the web package — not the API package the
+    // AppType lives in. This is what makes per-package config scoping
+    // useful in a monorepo.
+    expect(webBinding?.clientPackageDir.endsWith("apps/web")).toBe(true);
+    expect(webBinding?.server.exportName).toBe("AppType");
+  });
 });
