@@ -6,7 +6,7 @@ import { bold, colorMethod, cyan, dim, gray, green, red, yellow } from "./colors
 import {
   buildIgnoreFilter,
   findConfigFile,
-  type HonoUnusedConfig,
+  type HonoShakingUserConfig,
   type IgnoreFilter,
   loadConfig,
 } from "./config.ts";
@@ -395,7 +395,7 @@ const renderAutoReport = (
 
 const resolveConfig = async (
   args: Args,
-): Promise<{ config: HonoUnusedConfig | null; configPath: string | null }> => {
+): Promise<{ config: HonoShakingUserConfig | null; configPath: string | null }> => {
   if (args.noConfig) return { config: null, configPath: null };
   let configPath: string | null;
   if (args.configPath == null) {
