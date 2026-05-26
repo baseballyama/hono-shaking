@@ -14,7 +14,6 @@
   effectively dead config the user probably wants to clean up.
 
   Two new CLI flags:
-
   - `--fail-on-dead-config` — exit `1` if any ignore rule was unmatched.
     Useful in CI to keep the config from rotting as routes are renamed
     or removed.
