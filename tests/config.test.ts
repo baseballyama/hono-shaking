@@ -110,6 +110,90 @@ describe("buildIgnoreFilter", () => {
   });
 });
 
+describe("IgnoreFilter.getUnmatchedRules", () => {
+  it("returns no unmatched rules when every rule fires at least once", () => {
+    const filter = buildIgnoreFilter(
+      defineConfig({
+        ignore: {
+          routes: [{ method: null, path: "/foo", serverAppTypeFile: null, reason: null }],
+          orphans: [{ method: null, path: null, file: "**/x.ts", reason: null }],
+        },
+      }),
+      "/",
+    );
+    filter.isRouteIgnored(route("GET", "/foo"));
+    filter.isOrphanIgnored(call("GET", "/anything", "/y/x.ts"));
+    expect(filter.getUnmatchedRules()).toEqual([]);
+  });
+
+  it("flags route rules that never matched anything", () => {
+    const filter = buildIgnoreFilter(
+      defineConfig({
+        ignore: {
+          routes: [
+            { method: null, path: "/used", serverAppTypeFile: null, reason: "kept" },
+            { method: null, path: "/never", serverAppTypeFile: null, reason: "stale" },
+          ],
+          orphans: null,
+        },
+      }),
+      "/",
+    );
+    filter.isRouteIgnored(route("GET", "/used"));
+    filter.isRouteIgnored(route("GET", "/elsewhere"));
+    const unmatched = filter.getUnmatchedRules();
+    expect(unmatched).toHaveLength(1);
+    expect(unmatched[0]?.kind).toBe("route");
+    expect(unmatched[0]?.index).toBe(1);
+    const first = unmatched[0];
+    if (first == null) throw new Error("expected unmatched[0]");
+    expect((first.rule as { path?: unknown }).path).toBe("/never");
+  });
+
+  it("flags rules shadowed by a broader earlier rule", () => {
+    // `path: "/api/**"` comes first and matches everything under /api, so the
+    // narrower second rule never gets the chance to win the .some() race —
+    // that's effectively dead config the user should know about.
+    const filter = buildIgnoreFilter(
+      defineConfig({
+        ignore: {
+          routes: [
+            { method: null, path: "/api/**", serverAppTypeFile: null, reason: null },
+            { method: null, path: "/api/v1/users", serverAppTypeFile: null, reason: null },
+          ],
+          orphans: null,
+        },
+      }),
+      "/",
+    );
+    filter.isRouteIgnored(route("GET", "/api/v1/users"));
+    filter.isRouteIgnored(route("GET", "/api/v2/things"));
+    const unmatched = filter.getUnmatchedRules();
+    expect(unmatched).toHaveLength(1);
+    expect(unmatched[0]?.index).toBe(1);
+  });
+
+  it("flags orphan rules that never matched", () => {
+    const filter = buildIgnoreFilter(
+      defineConfig({
+        ignore: {
+          routes: null,
+          orphans: [
+            { method: "GET", path: "/used", file: null, reason: null },
+            { method: "GET", path: "/never", file: null, reason: null },
+          ],
+        },
+      }),
+      "/",
+    );
+    filter.isOrphanIgnored(call("GET", "/used"));
+    const unmatched = filter.getUnmatchedRules();
+    expect(unmatched).toHaveLength(1);
+    expect(unmatched[0]?.kind).toBe("orphan");
+    expect(unmatched[0]?.index).toBe(1);
+  });
+});
+
 describe("findConfigFile (monorepo walk-up)", () => {
   it("finds the config when started from a nested subdirectory", () => {
     const root = fixture("monorepo");

@@ -8,7 +8,10 @@ import {
   findConfigFile,
   type HonoShakingUserConfig,
   type IgnoreFilter,
+  type IgnoreOrphanPattern,
+  type IgnoreRoutePattern,
   loadConfig,
+  type UnmatchedConfigRule,
 } from "./config.ts";
 import { diffRoutes } from "./diff.ts";
 import { type DiscoveryResult, discoverProject } from "./discover.ts";
@@ -52,11 +55,18 @@ Optional:
   --allow-unused             Exit 0 even when unused routes are found
                              (default is exit 1).
   --fail-on-orphans          Exit 1 if any orphan call sites exist.
+  --fail-on-dead-config      Exit 1 if any config rule (ignore.routes /
+                             ignore.orphans entry) never matched. Useful
+                             in CI to keep the config from rotting as
+                             routes are renamed / removed.
+  --no-warn-dead-config      Silence the default-on warning that lists
+                             config rules that never matched.
   -h, --help                 Show this help
 
 Exit codes:
-  0  No unused routes (and no orphans if --fail-on-orphans is set).
-  1  Unused routes found, or orphans with --fail-on-orphans.
+  0  No unused routes (and no orphans / dead config if those gates are set).
+  1  Unused routes, orphans with --fail-on-orphans, or dead config with
+     --fail-on-dead-config.
   2  Invocation / configuration error.
 
 Framework support:
@@ -81,6 +91,8 @@ interface CommonArgs {
   showUsed: boolean;
   allowUnused: boolean;
   failOnOrphans: boolean;
+  failOnDeadConfig: boolean;
+  warnDeadConfig: boolean;
   configPath: string | null;
   noConfig: boolean;
 }
@@ -121,6 +133,8 @@ const parseCli = (): Args => {
       "no-config": { type: "boolean", default: false },
       "allow-unused": { type: "boolean", default: false },
       "fail-on-orphans": { type: "boolean", default: false },
+      "fail-on-dead-config": { type: "boolean", default: false },
+      "no-warn-dead-config": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
     strict: true,
@@ -137,6 +151,8 @@ const parseCli = (): Args => {
     showUsed: values["show-used"],
     allowUnused: values["allow-unused"],
     failOnOrphans: values["fail-on-orphans"],
+    failOnDeadConfig: values["fail-on-dead-config"],
+    warnDeadConfig: !values["no-warn-dead-config"],
     configPath: values.config ?? null,
     noConfig: values["no-config"],
   };
@@ -664,6 +680,43 @@ const runAuto = async (args: AutoArgs, filter: IgnoreFilter | null): Promise<num
   return code;
 };
 
+// Compact human-readable description of one rule — just the fields the user
+// actually wrote, in roughly the same order as the config schema. Used by the
+// dead-config warning so the user can locate the offending entry by eye.
+const formatRuleSummary = (rule: IgnoreRoutePattern | IgnoreOrphanPattern): string => {
+  const parts: string[] = [];
+  if (rule.method != null) parts.push(`method=${JSON.stringify(rule.method)}`);
+  if (rule.path != null) parts.push(`path=${JSON.stringify(rule.path)}`);
+  if ("serverAppTypeFile" in rule && rule.serverAppTypeFile != null) {
+    parts.push(`serverAppTypeFile=${JSON.stringify(rule.serverAppTypeFile)}`);
+  }
+  if ("file" in rule && rule.file != null) {
+    parts.push(`file=${JSON.stringify(rule.file)}`);
+  }
+  return parts.join(" ");
+};
+
+const reportDeadConfig = (
+  unmatched: UnmatchedConfigRule[],
+  configPath: string,
+  warn: boolean,
+): void => {
+  if (!warn || unmatched.length === 0) return;
+  const header = `${yellow("warning:")} ${bold(String(unmatched.length))} ignore rule${unmatched.length === 1 ? "" : "s"} in ${rel(configPath)} never matched:`;
+  info(header);
+  for (const u of unmatched) {
+    const tag = u.kind === "route" ? "ignore.routes" : "ignore.orphans";
+    const summary = formatRuleSummary(u.rule);
+    const reason = u.rule.reason != null ? dim(`  (${u.rule.reason})`) : "";
+    info(`  ${dim(`${tag}[${u.index}]`)}  ${summary}${reason}`);
+  }
+  info(
+    dim(
+      "  Rules may be unmatched because the route was renamed/removed, or because an earlier rule shadowed them.",
+    ),
+  );
+};
+
 const main = async (): Promise<void> => {
   const args = parseCli();
 
@@ -683,7 +736,16 @@ const main = async (): Promise<void> => {
     info(dim(`# config: ${rel(configPath)}`));
   }
 
-  const code = args.mode === "auto" ? await runAuto(args, filter) : await runManual(args, filter);
+  let code = args.mode === "auto" ? await runAuto(args, filter) : await runManual(args, filter);
+
+  if (filter != null && configPath != null) {
+    const unmatched = filter.getUnmatchedRules();
+    reportDeadConfig(unmatched, configPath, args.warnDeadConfig);
+    if (args.failOnDeadConfig && unmatched.length > 0 && code === 0) {
+      code = 1;
+    }
+  }
+
   process.exit(code);
 };
 
