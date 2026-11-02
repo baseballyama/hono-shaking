@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@jridgewell/trace-mapping':
-        specifier: ^0.3.30
+        specifier: ^0.3.31
         version: 0.3.31
       jiti:
         specifier: ^2.4.0
