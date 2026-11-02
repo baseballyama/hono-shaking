@@ -54,7 +54,7 @@
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
-    "@jridgewell/trace-mapping": "^0.3.30",
+    "@jridgewell/trace-mapping": "^0.3.31",
     "jiti": "^2.4.0",
     "typescript": "^5.6.0"
   },
