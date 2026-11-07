@@ -59,16 +59,16 @@
     "typescript": "^5.6.0"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.27.0",
-    "@types/node": "^22.0.0",
-    "@vue/compiler-sfc": "^3.4.0",
-    "hono": "^4.6.0",
-    "oxfmt": "^0.51.0",
-    "oxlint": "^1.66.0",
-    "svelte": "^5.0.0",
-    "svelte2tsx": "^0.7.0",
-    "tsdown": "^0.22.0",
-    "vitest": "^2.1.0"
+    "@changesets/cli": "^2.31.1",
+    "@types/node": "^22.20.5",
+    "@vue/compiler-sfc": "^3.5.45",
+    "hono": "^4.13.17",
+    "oxfmt": "^0.77.0",
+    "oxlint": "^1.92.0",
+    "svelte": "^5.57.3",
+    "svelte2tsx": "^0.7.63",
+    "tsdown": "^0.23.7",
+    "vitest": "^2.1.9"
   },
   "optionalDependencies": {
     "@vue/compiler-sfc": "^3.5.44",
