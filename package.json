@@ -76,7 +76,7 @@
     "svelte2tsx": "^0.7.63"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.20.2"
   },
   "packageManager": "pnpm@10.0.0",
   "pnpm": {
