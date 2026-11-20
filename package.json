@@ -68,7 +68,7 @@
     "svelte": "^5.0.0",
     "svelte2tsx": "^0.7.0",
     "tsdown": "^0.22.0",
-    "vitest": "^2.1.0"
+    "vitest": "^5.1.1"
   },
   "optionalDependencies": {
     "@vue/compiler-sfc": "^3.5.44",
